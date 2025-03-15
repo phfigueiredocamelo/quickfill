@@ -23,84 +23,66 @@ function cleanHTML(html) {
 	const parser = new DOMParser();
 	const doc = parser.parseFromString(html, "text/html");
 
-	// Remove script tags
-	const scripts = doc.querySelectorAll("script");
-	scripts.forEach((script) => script.remove());
-
-	// Remove style tags
-	const styles = doc.querySelectorAll("style");
-	styles.forEach((style) => style.remove());
-
-	// Remove link tags (usually CSS)
-	const links = doc.querySelectorAll("link");
-	links.forEach((link) => link.remove());
-
-	// Remove image tags
-	const images = doc.querySelectorAll("img");
-	images.forEach((img) => img.remove());
-
-	// Remove SVG elements
-	const svgs = doc.querySelectorAll("svg");
-	svgs.forEach((svg) => svg.remove());
-
-	// Remove any other unnecessary elements
-	const unnecessaryElements = doc.querySelectorAll(
-		"video, audio, canvas, iframe, noscript, meta",
-	);
-	unnecessaryElements.forEach((el) => el.remove());
+	// Remove all non-essential elements in one operation for better performance
+	const nonEssentialSelectors = [
+		"script", "style", "link", "img", "svg", "video", 
+		"audio", "canvas", "iframe", "noscript", "meta",
+		"footer", "header", "aside", "nav", "div.banner", 
+		"div.advertisement", "div.footer", "div.header",
+		"[class*='banner']", "[class*='ad-']", "[class*='footer']",
+		"[class*='header']", "[id*='banner']", "[id*='ad-']"
+	].join(",");
+	
+	const nonEssentialElements = doc.querySelectorAll(nonEssentialSelectors);
+	nonEssentialElements.forEach(el => el.remove());
 
 	// Extract just the form elements and their context
 	const relevantHTML = [];
 
-	// Clean attributes function - keeps only essential attributes
+	// Optimized attribute cleaning - only keep essential attributes in one pass
 	const cleanAttributes = (element) => {
-		const allAttributes = element.attributes;
-		const attributesToKeep = [
-			"id",
-			"name",
-			"type",
-			"value",
-			"placeholder",
-			"for",
-			"checked",
-			"selected",
-			"required",
-		];
-
-		for (let i = allAttributes.length - 1; i >= 0; i--) {
-			const attr = allAttributes[i];
-			if (!attributesToKeep.includes(attr.name)) {
+		const attributesToKeep = new Set([
+			"id", "name", "type", "value", "placeholder", 
+			"for", "checked", "selected", "required"
+		]);
+		
+		// Remove all non-essential attributes in one pass
+		for (let i = element.attributes.length - 1; i >= 0; i--) {
+			const attr = element.attributes[i];
+			if (!attributesToKeep.has(attr.name)) {
 				element.removeAttribute(attr.name);
 			}
 		}
 
-		// Clean children recursively
-		Array.from(element.children).forEach((child) => cleanAttributes(child));
+		// Process children only once
+		const children = Array.from(element.children);
+		children.forEach(child => cleanAttributes(child));
+		
 		return element;
 	};
 
-	// Add all forms with cleaned attributes
+	// Process forms with minimal HTML structure
 	const forms = doc.querySelectorAll("form");
-	forms.forEach((form) => {
-		// Clone the form
-		const formClone = form.cloneNode(true);
-
-		// Clean attributes
-		cleanAttributes(formClone);
-
-		// Keep only essential form attributes
+	forms.forEach(form => {
 		const formId = form.id || "";
 		const formName = form.name || "";
-
-		// Include the form with minimal attributes
-		const formHTML = `<form id="${formId}" name="${formName}">
-      ${formClone.innerHTML}
-    </form>`;
-
+		
+		// Get only the essential form inputs
+		const formInputs = form.querySelectorAll('input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]), select, textarea');
+		
+		// If form has no relevant inputs, skip it
+		if (formInputs.length === 0) return;
+		
+		// Clone once and clean attributes
+		const formClone = form.cloneNode(true);
+		cleanAttributes(formClone);
+		
+		// Create minimal form HTML
+		const formHTML = `<form id="${formId}" name="${formName}">${formClone.innerHTML}</form>`;
 		relevantHTML.push(formHTML);
 	});
 
-	// Add standalone input elements (not in forms)
+	// Process standalone inputs more efficiently
 	const inputSelectors = [
 		'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not(form *)',
 		"select:not(form *)",
@@ -109,41 +91,39 @@ function cleanHTML(html) {
 	].join(",");
 
 	const standaloneInputs = doc.querySelectorAll(inputSelectors);
-
+	
 	if (standaloneInputs.length > 0) {
 		relevantHTML.push('<div class="standalone-inputs">');
-
-		standaloneInputs.forEach((input) => {
-			// Clone the input to avoid modifying the original
-			const inputClone = input.cloneNode(true);
-			cleanAttributes(inputClone);
-
-			// Also include the input's label if it exists
-			let labelHTML = "";
-
-			// Check for label with 'for' attribute
-			if (input.id) {
-				const label = doc.querySelector(`label[for="${input.id}"]`);
-				if (label) {
-					const labelClone = label.cloneNode(true);
-					cleanAttributes(labelClone);
-					labelHTML = labelClone.outerHTML;
-				}
-			}
-
-			// Add the input with its label context
-			relevantHTML.push(`
-        <div class="input-group">
-          ${labelHTML}
-          ${inputClone.outerHTML}
-        </div>
-      `);
+		
+		// Build a map of labels for faster lookups
+		const labelMap = new Map();
+		const labels = doc.querySelectorAll('label[for]');
+		labels.forEach(label => {
+			labelMap.set(label.getAttribute('for'), label);
 		});
 
+		standaloneInputs.forEach(input => {
+			// Clone and clean in one operation
+			const inputClone = input.cloneNode(true);
+			cleanAttributes(inputClone);
+			
+			// Lookup label from map instead of querying DOM again
+			let labelHTML = "";
+			if (input.id && labelMap.has(input.id)) {
+				const labelClone = labelMap.get(input.id).cloneNode(true);
+				cleanAttributes(labelClone);
+				labelHTML = labelClone.outerHTML;
+			}
+			
+			// Compact HTML structure
+			relevantHTML.push(`<div class="input-group">${labelHTML}${inputClone.outerHTML}</div>`);
+		});
+		
 		relevantHTML.push("</div>");
 	}
 
-	return relevantHTML.join("\n");
+	// Return compact HTML with minimal whitespace
+	return relevantHTML.join("");
 }
 
 /**
@@ -379,7 +359,7 @@ async function fetchGPTResponse(apiKey, prompt) {
 			Authorization: `Bearer ${apiKey}`,
 		},
 		body: JSON.stringify({
-			model: "gpt-4-turbo-preview",
+			model: "gpt-3.5-turbo",
 			messages: [
 				{
 					role: "system",

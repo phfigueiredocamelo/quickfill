@@ -65,12 +65,33 @@ export class FormProcessor {
 				return { filledCount: 0 };
 			}
 
-			// Process the extracted fields with the user context to get values
-			const filledFields = await processFormWithGPT({
-				apiKey: this.apiKey,
-				formElements: extractedFields,
-				userConversation: this.contextData,
-				formFieldHints: this.buildFieldHints(),
+			// Group fields by form for parallel processing
+			const formFieldGroups = this.groupFieldsByForm(extractedFields);
+			
+			// Process each form group in parallel with the user context to get values
+			const processPromises = [];
+			
+			for (const [formId, fields] of formFieldGroups.entries()) {
+				// Create a processing task for each form
+				const processPromise = processFormWithGPT({
+					apiKey: this.apiKey,
+					formElements: fields,
+					userConversation: this.contextData,
+					formFieldHints: this.buildFieldHints(),
+				}).then(result => ({formId, fields: result}));
+				
+				processPromises.push(processPromise);
+			}
+			
+			// Wait for all form processing to complete in parallel
+			const processedResults = await Promise.all(processPromises);
+			
+			// Combine all field results
+			let filledFields = [];
+			processedResults.forEach(result => {
+				if (result.fields && result.fields.length > 0) {
+					filledFields = [...filledFields, ...result.fields];
+				}
 			});
 
 			console.log("Filled fields:", filledFields);
@@ -85,7 +106,7 @@ export class FormProcessor {
 			}
 
 			// Group the filled fields by formId
-			const formFieldGroups = this.groupFieldsByForm(filledFields);
+			const filledFieldGroups = this.groupFieldsByForm(filledFields);
 
 			// Fill each form with its fields
 			let filledCount = 0;
@@ -110,14 +131,19 @@ export class FormProcessor {
 			if (zenFilledCount > 0) {
 				filledCount++;
 			} else {
-				// Fallback to the regular form-by-form approach
+				// Fallback to the regular form-by-form approach but process in parallel
 				console.log("Falling back to regular form-by-form filling");
 				
-				for (const [formId, fields] of formFieldGroups.entries()) {
+				// Create promises for all form filling operations
+				const fillPromises = [];
+				
+				for (const [formId, fields] of filledFieldGroups.entries()) {
 					if (formId.startsWith("virtual-")) {
 						// Handle virtual forms (standalone inputs)
-						const filledFieldCount = await this.fillStandaloneInputs(fields);
-						if (filledFieldCount > 0) filledCount++;
+						fillPromises.push(
+							this.fillStandaloneInputs(fields)
+								.then(count => ({ formId, count }))
+						);
 					} else {
 						// Handle regular forms
 						const form =
@@ -126,14 +152,26 @@ export class FormProcessor {
 							document.forms[0];
 
 						if (form) {
-							const filledFieldCount = fillFormWithMappings(
-								form,
-								this.convertToLegacyFormat(fields),
-							);
-							if (filledFieldCount > 0) filledCount++;
+							// Create a promise that resolves when form is filled
+							const fillPromise = new Promise(resolve => {
+								const filledFieldCount = fillFormWithMappings(
+									form,
+									this.convertToLegacyFormat(fields),
+								);
+								resolve({ formId, count: filledFieldCount });
+							});
+							fillPromises.push(fillPromise);
 						}
 					}
 				}
+				
+				// Wait for all form filling operations to complete in parallel
+				const fillResults = await Promise.all(fillPromises);
+				
+				// Count successfully filled forms
+				fillResults.forEach(result => {
+					if (result.count > 0) filledCount++;
+				});
 			}
 
 			// Notify user about the results
