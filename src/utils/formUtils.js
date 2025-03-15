@@ -1049,13 +1049,15 @@ function fillCheckboxOrRadio(element, value) {
 }
 
 /**
- * Fills a text input or textarea element.
+ * Fills a text input or textarea element by simulating user typing.
  *
  * @param {HTMLInputElement|HTMLTextAreaElement} element - The input element
  * @param {string} value - The value to set
  */
 function fillInputElement(element, value) {
 	// For date inputs, ensure the value is formatted correctly
+	let valueToInsert = value;
+	
 	if (element.type === "date" && value) {
 		try {
 			let date;
@@ -1080,11 +1082,11 @@ function fillInputElement(element, value) {
 				throw new Error('Invalid date');
 			}
 			
-			element.value = date.toISOString().split("T")[0];
+			valueToInsert = date.toISOString().split("T")[0];
 		} catch (e) {
 			console.warn(`Invalid date value: ${value}`, e);
-			// Try to set the value directly if we couldn't parse it
-			element.value = value;
+			// Use the value directly if we couldn't parse it
+			valueToInsert = value;
 		}
 	} else if (element.getAttribute('maskplaceholder') === 'dd/mm/yyyy') {
 		// Handle masked date inputs (usually in Brazilian format)
@@ -1093,11 +1095,11 @@ function fillInputElement(element, value) {
 			// Try different formats
 			if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
 				// Already in the right format
-				element.value = value;
+				valueToInsert = value;
 			} else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
 				// ISO format YYYY-MM-DD
 				const [year, month, day] = value.split('-');
-				element.value = `${day}/${month}/${year}`;
+				valueToInsert = `${day}/${month}/${year}`;
 			} else {
 				// Try to parse and reformat
 				date = new Date(value);
@@ -1105,18 +1107,190 @@ function fillInputElement(element, value) {
 					const day = String(date.getDate()).padStart(2, '0');
 					const month = String(date.getMonth() + 1).padStart(2, '0');
 					const year = date.getFullYear();
-					element.value = `${day}/${month}/${year}`;
+					valueToInsert = `${day}/${month}/${year}`;
 				} else {
 					throw new Error('Invalid date');
 				}
 			}
 		} catch (e) {
 			console.warn(`Invalid date value for masked input: ${value}`, e);
-			element.value = value;
+			valueToInsert = value;
 		}
-	} else {
-		element.value = value;
 	}
+
+	// First approach: Try with direct value setting
+	try {
+		// Clear existing value
+		element.value = "";
+		
+		// Focus on the input to activate any listeners
+		element.focus();
+		
+		// Add debug logs
+		console.log(`Filling element ${element.id || element.name || 'unnamed'} with value: "${valueToInsert}"`);
+		
+		// Try simulating typing with small delays between keystrokes
+		simulateTypingWithDelays(element, valueToInsert)
+			.then(() => {
+				console.log(`Completed typing simulation for ${element.id || element.name || 'unnamed'}`);
+				
+				// Dispatch final blur event to trigger validation
+				const blurEvent = new Event('blur', { bubbles: true });
+				element.dispatchEvent(blurEvent);
+				
+				// Double-check if value was set correctly
+				if (element.value.length < valueToInsert.length) {
+					console.warn(`Typing simulation incomplete for ${element.id || element.name}: Expected "${valueToInsert}", got "${element.value}"`);
+					// Fallback to direct setting if typing simulation didn't complete properly
+					element.value = valueToInsert;
+					triggerFullEventSequence(element);
+				}
+			})
+			.catch(error => {
+				console.error(`Error during typing simulation: ${error}`);
+				// Fallback to direct setting
+				element.value = valueToInsert;
+				triggerFullEventSequence(element);
+			});
+	} catch (error) {
+		console.error(`Error filling input: ${error}`);
+		// Fallback to direct setting
+		element.value = valueToInsert;
+		
+		// Trigger events manually
+		const inputEvent = new Event('input', { bubbles: true });
+		const changeEvent = new Event('change', { bubbles: true });
+		element.dispatchEvent(inputEvent);
+		element.dispatchEvent(changeEvent);
+	}
+}
+
+/**
+ * Simulates typing with small delays between keystrokes
+ * 
+ * @param {HTMLElement} element - The element to type into
+ * @param {string} text - The text to type
+ * @returns {Promise} - Promise that resolves when typing is complete
+ */
+function simulateTypingWithDelays(element, text) {
+	return new Promise((resolve, reject) => {
+		let i = 0;
+		
+		function typeNextChar() {
+			if (i >= text.length) {
+				resolve();
+				return;
+			}
+			
+			const char = text[i];
+			
+			// Add character to value
+			const currentValue = element.value;
+			element.value = currentValue + char;
+			
+			// Trigger key events
+			triggerKeyEvents(element, char);
+			
+			// Move to next character after a small delay
+			i++;
+			setTimeout(typeNextChar, 10); // 10ms delay between keystrokes
+		}
+		
+		// Start typing
+		typeNextChar();
+	});
+}
+
+/**
+ * Triggers all key-related events for a character
+ * 
+ * @param {HTMLElement} element - The element to trigger events on
+ * @param {string} char - The character being typed
+ */
+function triggerKeyEvents(element, char) {
+	// Get appropriate key code
+	let keyCode = char.charCodeAt(0);
+	
+	// For special characters, map to correct code
+	const specialKeys = {
+		' ': 'Space',
+		'.': 'Period',
+		',': 'Comma',
+		'/': 'Slash',
+		'\\': 'Backslash',
+		'-': 'Minus',
+		'+': 'Plus',
+		'=': 'Equal',
+		'@': 'At'
+	};
+	
+	let code;
+	if (specialKeys[char]) {
+		code = specialKeys[char];
+	} else if (/[0-9]/.test(char)) {
+		code = `Digit${char}`;
+	} else if (/[a-zA-Z]/.test(char)) {
+		code = `Key${char.toUpperCase()}`;
+	} else {
+		code = `Key${char}`;
+	}
+	
+	// Create common event options
+	const eventOptions = {
+		key: char,
+		code: code,
+		charCode: keyCode,
+		keyCode: keyCode,
+		which: keyCode,
+		bubbles: true,
+		cancelable: true,
+		view: window
+	};
+	
+	// Create and dispatch keydown event
+	const keydownEvent = new KeyboardEvent('keydown', eventOptions);
+	element.dispatchEvent(keydownEvent);
+	
+	// Create and dispatch keypress event
+	const keypressEvent = new KeyboardEvent('keypress', eventOptions);
+	element.dispatchEvent(keypressEvent);
+	
+	// Create and dispatch input event
+	try {
+		const inputEvent = new InputEvent('input', {
+			bubbles: true,
+			cancelable: true,
+			inputType: 'insertText',
+			data: char
+		});
+		element.dispatchEvent(inputEvent);
+	} catch (e) {
+		// Fallback for browsers that don't support InputEvent constructor
+		const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+		element.dispatchEvent(inputEvent);
+	}
+	
+	// Create and dispatch keyup event
+	const keyupEvent = new KeyboardEvent('keyup', eventOptions);
+	element.dispatchEvent(keyupEvent);
+}
+
+/**
+ * Triggers a full sequence of events on an element
+ * 
+ * @param {HTMLElement} element - The element to trigger events on
+ */
+function triggerFullEventSequence(element) {
+	// Focus
+	element.focus();
+	element.dispatchEvent(new Event('focus', { bubbles: true }));
+	
+	// Input and change
+	element.dispatchEvent(new Event('input', { bubbles: true }));
+	element.dispatchEvent(new Event('change', { bubbles: true }));
+	
+	// Blur
+	element.dispatchEvent(new Event('blur', { bubbles: true }));
 }
 
 /**
@@ -1135,12 +1309,16 @@ function highlightFilledField(element) {
  * @param {HTMLElement} element - The element to trigger events on
  */
 function triggerEvents(element) {
-	// Create and dispatch events
-	const inputEvent = new Event("input", { bubbles: true });
-	const changeEvent = new Event("change", { bubbles: true });
-
-	element.dispatchEvent(inputEvent);
-	element.dispatchEvent(changeEvent);
+	// Only dispatch events for non-text inputs (select, checkbox, radio)
+	// For text inputs, events are dispatched during character-by-character input simulation
+	if (element.type === "checkbox" || element.type === "radio" || element.tagName.toLowerCase() === "select") {
+		// Create and dispatch events
+		const inputEvent = new Event("input", { bubbles: true });
+		const changeEvent = new Event("change", { bubbles: true });
+	
+		element.dispatchEvent(inputEvent);
+		element.dispatchEvent(changeEvent);
+	}
 }
 
 /**
