@@ -5,7 +5,7 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     // Initialize default settings on installation
     chrome.storage.sync.set({
-      enabled: true,
+      enabled: false,
       apiKey: '',
       contextData: '',
       customFields: {}

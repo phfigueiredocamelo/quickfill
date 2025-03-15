@@ -1,12 +1,291 @@
 /**
- * Processes form elements using GPT-4 to extract field mappings from context.
+ * GPT Processor - Processes form elements and HTML using GPT API
  *
- * @param {Object} params - The parameters for processing
+ * This module handles:
+ * 1. Processing HTML to extract form elements
+ * 2. Sending form elements to GPT for field extraction
+ * 3. Caching responses to avoid redundant API calls
+ * 4. Matching form data with user context
+ */
+
+// Cache for GPT responses (in-memory)
+const gptResponseCache = new Map();
+const CACHE_EXPIRATION = 60 * 60 * 1000; // 1 hour in milliseconds
+
+/**
+ * Cleans HTML to reduce token usage by removing unnecessary content.
+ *
+ * @param {string} html - Raw HTML content
+ * @returns {string} - Cleaned HTML with only relevant form elements
+ */
+function cleanHTML(html) {
+	// Create a DOM parser
+	const parser = new DOMParser();
+	const doc = parser.parseFromString(html, "text/html");
+
+	// Remove script tags
+	const scripts = doc.querySelectorAll("script");
+	scripts.forEach((script) => script.remove());
+
+	// Remove style tags
+	const styles = doc.querySelectorAll("style");
+	styles.forEach((style) => style.remove());
+
+	// Remove link tags (usually CSS)
+	const links = doc.querySelectorAll("link");
+	links.forEach((link) => link.remove());
+
+	// Remove image tags
+	const images = doc.querySelectorAll("img");
+	images.forEach((img) => img.remove());
+
+	// Remove SVG elements
+	const svgs = doc.querySelectorAll("svg");
+	svgs.forEach((svg) => svg.remove());
+
+	// Remove any other unnecessary elements
+	const unnecessaryElements = doc.querySelectorAll(
+		"video, audio, canvas, iframe, noscript, meta",
+	);
+	unnecessaryElements.forEach((el) => el.remove());
+
+	// Extract just the form elements and their context
+	const relevantHTML = [];
+
+	// Clean attributes function - keeps only essential attributes
+	const cleanAttributes = (element) => {
+		const allAttributes = element.attributes;
+		const attributesToKeep = [
+			"id",
+			"name",
+			"type",
+			"value",
+			"placeholder",
+			"for",
+			"checked",
+			"selected",
+			"required",
+		];
+
+		for (let i = allAttributes.length - 1; i >= 0; i--) {
+			const attr = allAttributes[i];
+			if (!attributesToKeep.includes(attr.name)) {
+				element.removeAttribute(attr.name);
+			}
+		}
+
+		// Clean children recursively
+		Array.from(element.children).forEach((child) => cleanAttributes(child));
+		return element;
+	};
+
+	// Add all forms with cleaned attributes
+	const forms = doc.querySelectorAll("form");
+	forms.forEach((form) => {
+		// Clone the form
+		const formClone = form.cloneNode(true);
+
+		// Clean attributes
+		cleanAttributes(formClone);
+
+		// Keep only essential form attributes
+		const formId = form.id || "";
+		const formName = form.name || "";
+
+		// Include the form with minimal attributes
+		const formHTML = `<form id="${formId}" name="${formName}">
+      ${formClone.innerHTML}
+    </form>`;
+
+		relevantHTML.push(formHTML);
+	});
+
+	// Add standalone input elements (not in forms)
+	const inputSelectors = [
+		'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not(form *)',
+		"select:not(form *)",
+		"textarea:not(form *)",
+		'div[id^="Select"]:not(form *)',
+	].join(",");
+
+	const standaloneInputs = doc.querySelectorAll(inputSelectors);
+
+	if (standaloneInputs.length > 0) {
+		relevantHTML.push('<div class="standalone-inputs">');
+
+		standaloneInputs.forEach((input) => {
+			// Clone the input to avoid modifying the original
+			const inputClone = input.cloneNode(true);
+			cleanAttributes(inputClone);
+
+			// Also include the input's label if it exists
+			let labelHTML = "";
+
+			// Check for label with 'for' attribute
+			if (input.id) {
+				const label = doc.querySelector(`label[for="${input.id}"]`);
+				if (label) {
+					const labelClone = label.cloneNode(true);
+					cleanAttributes(labelClone);
+					labelHTML = labelClone.outerHTML;
+				}
+			}
+
+			// Add the input with its label context
+			relevantHTML.push(`
+        <div class="input-group">
+          ${labelHTML}
+          ${inputClone.outerHTML}
+        </div>
+      `);
+		});
+
+		relevantHTML.push("</div>");
+	}
+
+	return relevantHTML.join("\n");
+}
+
+/**
+ * Creates a cache key for the page
+ *
+ * @param {string} url - Current page URL
+ * @param {string} html - HTML content
+ * @returns {string} - Unique cache key
+ */
+function createCacheKey(url, html) {
+	// Use the URL as the base of the cache key
+	let key = url;
+
+	// Add a hash of the first 200 chars of the HTML to detect major changes
+	const hashInput = html.substring(0, 200);
+	let hashCode = 0;
+	for (let i = 0; i < hashInput.length; i++) {
+		hashCode = (hashCode << 5) - hashCode + hashInput.charCodeAt(i);
+		hashCode |= 0; // Convert to 32bit integer
+	}
+
+	return `${key}-${hashCode}`;
+}
+
+/**
+ * Processes page HTML using GPT to extract form fields
+ *
+ * @param {Object} params - Processing parameters
+ * @param {string} params.apiKey - OpenAI API key
+ * @param {string} params.html - Page HTML content
+ * @param {string} params.url - Current page URL
+ * @returns {Promise<Array>} - Extracted form fields
+ */
+async function processHTMLWithGPT({ apiKey, html, url }) {
+	if (!apiKey) throw new Error("API key is required");
+	if (!html) throw new Error("HTML content is required");
+
+	try {
+		// Clean the HTML to reduce token usage
+		const cleanedHTML = cleanHTML(html);
+		console.log("Cleaned HTML:", cleanedHTML);
+		// Generate cache key
+		const cacheKey = createCacheKey(url, cleanedHTML);
+		console.log("Cache key:", cacheKey);
+		// Check if we have a valid cached response
+		if (gptResponseCache.has(cacheKey)) {
+			const cachedResponse = gptResponseCache.get(cacheKey);
+
+			// Check if the cache is still valid
+			if (Date.now() - cachedResponse.timestamp < CACHE_EXPIRATION) {
+				console.log("Using cached GPT response");
+				return cachedResponse.data;
+			}
+
+			// Cache has expired, remove it
+			gptResponseCache.delete(cacheKey);
+		}
+
+		// Build the prompt for GPT
+		const prompt = buildHTMLExtractPrompt(cleanedHTML, url);
+		console.log("GPT Prompt:", prompt);
+		// Make the API request
+		const response = await fetchGPTResponse(apiKey, prompt);
+		console.log("GPT Response:", response);
+		// Process and validate the response
+		const extractedFields = processGPTFieldExtractionResponse(response);
+		console.log("Extracted fields:", extractedFields);
+		// Cache the response
+		gptResponseCache.set(cacheKey, {
+			timestamp: Date.now(),
+			data: extractedFields,
+		});
+		console.log("set cache", gptResponseCache);
+		return extractedFields;
+	} catch (error) {
+		console.error("Error processing HTML with GPT:", error);
+		throw error;
+	}
+}
+
+/**
+ * Builds the prompt for GPT to extract form fields from HTML
+ *
+ * @param {string} html - Cleaned HTML content
+ * @param {string} url - Current page URL
+ * @returns {string} - Prompt for GPT
+ */
+function buildHTMLExtractPrompt(html, url) {
+	return `
+You are a form field extraction assistant. Your task is to analyze HTML form content and extract all visible form fields.
+
+## HTML Content from ${url}:
+\`\`\`html
+${html}
+\`\`\`
+
+## Instructions:
+1. Extract all form elements information
+2. For each field, identify:
+   - formId: The ID of the form or a generated ID if standalone
+   - id: The field's ID or name attribute
+   - label: The text label associated with the field
+   - type: The field type (text, email, checkbox, radio, select, etc.)
+   - options: For select fields, list all available options
+   - placeholder: The placeholder text if available
+   - required: Whether the field is required (true/false)
+   - value: The default value if available
+   - checked: For checkboxes/radio buttons, whether it's checked (true/false)
+   - selected: For select fields, whether it's selected (true/false)
+   - for: The ID of the label associated with the field
+   - name: The field's name attribute if available
+
+3. Return ONLY a valid JSON array with the following structure:
+[
+  {
+    "formId": "form1",
+    "id": "name",
+    "label": "Full Name",
+    "type": "text"
+  },
+  {
+    "formId": "virtual-form1",
+    "id": "email",
+    "label": "Email Address",
+    "type": "email"
+  }
+]
+
+For standalone inputs, use a virtual form ID like "virtual-form1".
+Return ONLY the JSON array, no explanations or other text.
+`;
+}
+
+/**
+ * Processes form elements and user context to determine field values
+ *
+ * @param {Object} params - Processing parameters
  * @param {string} params.apiKey - OpenAI API key
  * @param {Array} params.formElements - Array of extracted form elements
- * @param {string} params.userConversation - Conversation context to analyze
- * @param {string} [params.formFieldHints] - Additional context about form fields
- * @returns {Promise<Array>} - JSON array of field mappings
+ * @param {string} params.userConversation - User context data
+ * @param {string} [params.formFieldHints] - Additional hints
+ * @returns {Promise<Array>} - Mapped form fields with values
  */
 async function processFormWithGPT({
 	apiKey,
@@ -32,22 +311,20 @@ async function processFormWithGPT({
 		const response = await fetchGPTResponse(apiKey, prompt);
 		console.log("GPT Response:", response);
 		// Process and validate the response
-		return processGPTResponse(response, formElements);
+		return processGPTMappingResponse(response, formElements);
 	} catch (error) {
 		console.error("Error processing form with GPT:", error);
 		throw error;
 	}
 }
 
-// Form element extraction has been moved to formUtils.js
-
 /**
- * Builds the prompt for GPT-4.
+ * Builds the prompt for GPT to match form fields with user context
  *
- * @param {Array} formElements - Array of form element objects
- * @param {string} userConversation - Conversation context
+ * @param {Array} formElements - Form elements to fill
+ * @param {string} userConversation - User context
  * @param {string} formFieldHints - Additional hints
- * @returns {string} - The complete prompt for GPT
+ * @returns {string} - Complete prompt
  */
 function buildGPTPrompt(formElements, userConversation, formFieldHints) {
 	return `
@@ -64,15 +341,23 @@ ${formFieldHints ? `## Additional Field Hints:\n${formFieldHints}` : ""}
 ## Instructions:
 1. Analyze the form elements and their labels/types
 2. Identify relevant information from the conversation context
-3. Match the form fields with appropriate values find the best match possible for each field based on the context provided in the conversation.
-4. Return ONLY a JSON array with the following structure:
+3. Match the form fields with appropriate values, finding the best match possible for each field based on the context provided in the conversation
+4. Include ALL of these identifiers in your response to maximize matching success:
+   - formId: Always include the form ID even for standalone inputs
+   - id: Include the field's ID or name
+   - label: Always include the exact label text as it appears
+5. Return ONLY a JSON array with the following structure:
 [
   {
-    "htmlElementId": "exact-html-element-id-or-name",
-    "value": "extracted-value-from-context"
+    "formId": "form1",
+    "id": "name",
+    "label": "Full Name",
+    "value": "John Smith",
+    "type": "text"
   }
 ]
 
+It's CRITICAL to include ALL identifiers (formId, id, and label) for each field to ensure proper matching.
 For select fields, ensure the value matches one of the available options.
 For radio/checkbox fields, set the value to "true" or "false".
 Do not include any explanation, just the JSON array.
@@ -80,11 +365,11 @@ Do not include any explanation, just the JSON array.
 }
 
 /**
- * Makes a request to the OpenAI API.
+ * Makes a request to the OpenAI API
  *
  * @param {string} apiKey - OpenAI API key
- * @param {string} prompt - The prompt for GPT
- * @returns {Promise<Object>} - The API response
+ * @param {string} prompt - Prompt for GPT
+ * @returns {Promise<Object>} - API response
  */
 async function fetchGPTResponse(apiKey, prompt) {
 	const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -99,7 +384,7 @@ async function fetchGPTResponse(apiKey, prompt) {
 				{
 					role: "system",
 					content:
-						"You are a form field analysis assistant. Your task is to extract information from conversation context to fill form fields. Return only valid JSON.",
+						"You are a form field analysis assistant. Your task is to extract information from HTML and conversation context to fill form fields. Return only valid JSON.",
 				},
 				{
 					role: "user",
@@ -121,26 +406,65 @@ async function fetchGPTResponse(apiKey, prompt) {
 }
 
 /**
- * Processes and validates the GPT response.
+ * Processes the GPT response for HTML field extraction
  *
- * @param {Object} response - The API response
- * @param {Array} formElements - Array of form element objects
- * @returns {Array} - Validated field mappings
+ * @param {Object} response - GPT API response
+ * @returns {Array} - Extracted form fields
  */
-function processGPTResponse(response, formElements) {
+function processGPTFieldExtractionResponse(response) {
 	// Extract the content from the GPT response
 	const content = response.choices?.[0]?.message?.content;
 	if (!content) {
 		throw new Error("Invalid response from GPT");
 	}
 
-	// Extract JSON from the response (in case there's any extra text)
+	// Extract JSON from the response
+	let fields;
+	try {
+		// Find JSON array in the response
+		const jsonMatch = content.match(/\[[\s\S]*\]/);
+		if (jsonMatch) {
+			fields = JSON.parse(jsonMatch[0]);
+		} else {
+			throw new Error("No JSON array found in response");
+		}
+	} catch (error) {
+		console.error("Error parsing GPT response:", error);
+		throw new Error("Failed to parse GPT response");
+	}
+
+	// Validate the fields
+	if (!Array.isArray(fields)) {
+		throw new Error("GPT response is not an array");
+	}
+
+	return fields;
+}
+
+/**
+ * Processes the GPT response for form field mapping
+ *
+ * @param {Object} response - GPT API response
+ * @param {Array} formElements - Original form elements
+ * @returns {Array} - Mapped form fields with values
+ */
+function processGPTMappingResponse(response, formElements) {
+	// Extract the content from the GPT response
+	const content = response.choices?.[0]?.message?.content;
+	if (!content) {
+		throw new Error("Invalid response from GPT");
+	}
+
+	console.log("Raw GPT response content:", content);
+
+	// Extract JSON from the response
 	let mappings;
 	try {
 		// Find JSON array in the response
 		const jsonMatch = content.match(/\[[\s\S]*\]/);
 		if (jsonMatch) {
 			mappings = JSON.parse(jsonMatch[0]);
+			console.log("Parsed mappings from GPT:", JSON.stringify(mappings, null, 2));
 		} else {
 			throw new Error("No JSON array found in response");
 		}
@@ -154,40 +478,44 @@ function processGPTResponse(response, formElements) {
 		throw new Error("GPT response is not an array");
 	}
 
-	// Create a map of valid element IDs and names
+	// Create maps of valid element IDs, names, labels, and formIds
 	const validElementIds = new Map();
-	// biome-ignore lint/complexity/noForEach: <explanation>
+	const validElementLabels = new Map();
+	const validElementFormIds = new Map();
+	
+	console.log("Form elements for validation:", JSON.stringify(formElements, null, 2));
+	
 	formElements.forEach((el) => {
 		if (el.id) validElementIds.set(el.id, el);
 		if (el.name) validElementIds.set(el.name, el);
+		if (el.label) validElementLabels.set(el.label.toLowerCase(), el);
+		if (el.formId) validElementFormIds.set(el.formId, el);
 	});
 
-	// Validate each mapping
-	return mappings.filter((mapping) => {
-		const { htmlElementId, value } = mapping;
+	console.log("Valid element IDs:", Array.from(validElementIds.keys()));
+	console.log("Valid element labels:", Array.from(validElementLabels.keys()));
 
-		// Check if the element exists
-		if (!htmlElementId || !validElementIds.has(htmlElementId)) {
-			console.warn(`Element with ID/name "${htmlElementId}" not found`);
-			return false;
-		}
-
-		// Check if the value is appropriate for the element type
-		const element = validElementIds.get(htmlElementId);
-		if (!isValidValueForElement(value, element)) {
-			console.warn(`Invalid value for element "${htmlElementId}"`);
-			return false;
-		}
-
-		return true;
+	// Convert mappings to the format expected by formUtils with htmlElementId property
+	const processedMappings = mappings.map(mapping => {
+		// Create a new object with htmlElementId property
+		return {
+			htmlElementId: mapping.id || "",
+			value: mapping.value || "",
+			label: mapping.label || "",
+			formId: mapping.formId || "",
+			type: mapping.type || ""
+		};
 	});
+
+	console.log("Prepared mappings for form filling:", JSON.stringify(processedMappings, null, 2));
+	return processedMappings;
 }
 
 /**
- * Validates if a value is appropriate for an element type.
+ * Validates if a value is appropriate for an element type
  *
- * @param {string} value - The value to validate
- * @param {Object} element - The element info
+ * @param {string} value - Value to validate
+ * @param {Object} element - Element info
  * @returns {boolean} - Whether the value is valid
  */
 function isValidValueForElement(value, element) {
@@ -225,5 +553,5 @@ function isValidValueForElement(value, element) {
 	}
 }
 
-// Export the main function
-export { processFormWithGPT };
+// Export the functions
+export { processFormWithGPT, processHTMLWithGPT };

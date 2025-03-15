@@ -247,22 +247,228 @@ export function fillFormWithMappings(form, mappings) {
 	// Fill each mapped field
 	// biome-ignore lint/complexity/noForEach: <explanation>
 	mappings.forEach((mapping) => {
-		const { htmlElementId, value } = mapping;
+		const { htmlElementId, value, label, type } = mapping;
+		console.log(`Attempting to fill element: ID=${htmlElementId}, Label=${label}, Type=${type}, Value=${value}`);
 
 		// Try to find the element by ID or name
-		const element =
-			form.querySelector(`#${htmlElementId}`) ||
-			form.querySelector(`[name="${htmlElementId}"]`);
+		let element = null;
+		
+		if (htmlElementId) {
+			try {
+				// Use safe selectors - escape special characters in ID
+				const safeId = CSS.escape(htmlElementId);
+				element = form.querySelector(`#${safeId}`) || 
+						form.querySelector(`[name="${safeId}"]`);
+			} catch (e) {
+				console.warn("Error using CSS.escape:", e);
+				// Fallback to direct query if CSS.escape fails
+				element = form.querySelector(`#${htmlElementId}`) || 
+						form.querySelector(`[name="${htmlElementId}"]`);
+			}
+		}
+
+		// Try to find by label if ID/name fails
+		if (!element && label) {
+			console.log(`Trying to find element by label: "${label}"`);
+			
+			// Use document-wide search when in zen mode or first try failed
+			const useZenMode = form.zenProcess === true;
+			
+			// Try document-wide search for all cases
+			const allLabels = document.querySelectorAll('label');
+			for (const labelEl of allLabels) {
+				const labelText = labelEl.textContent.trim();
+				if (labelText.toLowerCase() === label.toLowerCase() || 
+				   labelText.toLowerCase().includes(label.toLowerCase())) {
+					
+					// Try to find element by 'for' attribute
+					if (labelEl.getAttribute('for')) {
+						const inputById = document.getElementById(labelEl.getAttribute('for'));
+						if (inputById) {
+							element = inputById;
+							console.log(`Found element by label 'for' attribute: ${element.id || element.name}`);
+							break;
+						}
+					}
+					
+					// Look for inputs inside the label
+					const inputsInLabel = labelEl.querySelectorAll('input, select, textarea');
+					if (inputsInLabel.length > 0) {
+						element = inputsInLabel[0];
+						console.log(`Found input inside label: ${element.id || element.name || 'unnamed'}`);
+						break;
+					}
+					
+					// Look for inputs near this label
+					const labelParent = labelEl.parentElement;
+					if (labelParent) {
+						const nearbyInputs = labelParent.querySelectorAll('input, select, textarea');
+						if (nearbyInputs.length > 0) {
+							element = nearbyInputs[0];
+							console.log(`Found nearby input element: ${element.id || element.name || 'unnamed'}`);
+							break;
+						}
+					}
+					
+					// If zen mode, try more aggressive DOM traversal
+					if (useZenMode && !element) {
+						// Look for inputs in neighboring elements
+						const labelGrandparent = labelParent?.parentElement;
+						if (labelGrandparent) {
+							// Try siblings of the label's parent
+							Array.from(labelGrandparent.children).forEach(sibling => {
+								if (!element && sibling !== labelParent) {
+									const siblingInputs = sibling.querySelectorAll('input, select, textarea');
+									if (siblingInputs.length > 0) {
+										element = siblingInputs[0];
+										console.log(`Found input in sibling container: ${element.id || element.name || 'unnamed'}`);
+									}
+								}
+							});
+							
+							// If still no element, look at the grandparent's other children
+							if (!element) {
+								const allInputs = labelGrandparent.querySelectorAll('input, select, textarea');
+								if (allInputs.length > 0) {
+									element = allInputs[0];
+									console.log(`Found input in grandparent container: ${element.id || element.name || 'unnamed'}`);
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			// If still no element found and not in zen mode, try form-scoped approach
+			if (!element && !useZenMode) {
+				// Find all labels in the form
+				const labels = Array.from(form.querySelectorAll('label'));
+				
+				// Find a label that matches or contains our target text
+				const matchingLabel = labels.find(labelEl => {
+					const labelText = labelEl.textContent.trim();
+					return labelText.toLowerCase() === label.toLowerCase() || 
+						   labelText.toLowerCase().includes(label.toLowerCase());
+				});
+				
+				if (matchingLabel && matchingLabel.getAttribute('for')) {
+					element = form.querySelector(`#${matchingLabel.getAttribute('for')}`);
+					console.log(`Found element by label: ${element ? (element.id || element.name) : 'not found'}`);
+				}
+				
+				// If we still don't have an element, try finding inputs near this label
+				if (!element && matchingLabel) {
+					// Look for inputs that are siblings or children of the label's parent
+					const labelParent = matchingLabel.parentElement;
+					if (labelParent) {
+						const nearbyInputs = labelParent.querySelectorAll('input, select, textarea');
+						if (nearbyInputs.length > 0) {
+							element = nearbyInputs[0];
+							console.log(`Found nearby input element: ${element.id || element.name || 'unnamed'}`);
+						}
+					}
+					
+					// Try looking for inputs inside the label itself
+					if (!element) {
+						const inputsInLabel = matchingLabel.querySelectorAll('input, select, textarea');
+						if (inputsInLabel.length > 0) {
+							element = inputsInLabel[0];
+							console.log(`Found input inside label: ${element.id || element.name || 'unnamed'}`);
+						}
+					}
+				}
+			}
+		}
+
+		// Try to find by type and value for radio buttons
+		if (!element && type === "radio" && value) {
+			console.log(`Trying to find radio button with value: "${value}"`);
+			const radioButtons = form.querySelectorAll('input[type="radio"]');
+			for (const radio of radioButtons) {
+				if (radio.value === value) {
+					element = radio;
+					console.log(`Found radio button with value: ${value}`);
+					break;
+				}
+			}
+		}
+
+		// If we still can't find it, try a more generic approach by input type and position
+		if (!element && type) {
+			console.log(`Trying to find element by type: "${type}"`);
+			const typeSelector = type === "hidden" ? 
+				`input[type="${type}"]` : 
+				`input[type="${type}"]:not([type="hidden"]), ${type}`;
+				
+			const elements = Array.from(form.querySelectorAll(typeSelector));
+			if (elements.length > 0) {
+				// If we have a label, try to find an element that's near text containing the label
+				if (label) {
+					// Look for text nodes that contain our label text
+					const walker = document.createTreeWalker(form, NodeFilter.SHOW_TEXT);
+					let textNode;
+					let bestElement = null;
+					let shortestDistance = Infinity;
+					
+					while (textNode = walker.nextNode()) {
+						const text = textNode.textContent.trim();
+						if (text.toLowerCase().includes(label.toLowerCase())) {
+							// Found text matching our label, now find closest input
+							for (const el of elements) {
+								// Calculate a simple "distance" between the text node and this element
+								const textRect = textNode.parentElement.getBoundingClientRect();
+								const elRect = el.getBoundingClientRect();
+								const distance = Math.abs(textRect.top - elRect.top) + Math.abs(textRect.left - elRect.left);
+								
+								if (distance < shortestDistance) {
+									shortestDistance = distance;
+									bestElement = el;
+								}
+							}
+						}
+					}
+					
+					if (bestElement) {
+						element = bestElement;
+						console.log(`Found element by proximity to label text: ${element.id || element.name || 'unnamed'}`);
+					}
+				}
+				
+				// If we still don't have an element, just take the first one
+				if (!element) {
+					element = elements[0];
+					console.log(`Using first ${type} element found: ${element.id || element.name || 'unnamed'}`);
+				}
+			}
+		}
+
+		// If we still don't have an element, try to find by similar property (like a name containing the ID)
+		if (!element && htmlElementId) {
+			const inputs = form.querySelectorAll('input, select, textarea');
+			// Look for inputs with ID or name containing our target ID
+			for (const input of inputs) {
+				if ((input.id && input.id.includes(htmlElementId)) || 
+					(input.name && input.name.includes(htmlElementId))) {
+					element = input;
+					console.log(`Found element by partial ID/name match: ${input.id || input.name}`);
+					break;
+				}
+			}
+		}
 
 		if (!element) {
-			console.warn(`Element with ID/name "${htmlElementId}" not found in form`);
+			console.warn(`Element with ID="${htmlElementId}", label="${label}" not found in form`);
 			return;
 		}
 
 		// Fill the element
+		console.log(`Element found, filling with value: ${value}`);
 		const filled = fillElement(element, value);
 		if (filled) {
 			filledFields.push(element);
+			console.log(`Successfully filled element: ${element.id || element.name || 'unnamed'}`);
+		} else {
+			console.warn(`Failed to fill element: ${element.id || element.name || 'unnamed'}`);
 		}
 	});
 
@@ -289,31 +495,215 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 
 	// Create a map of original inputs by ID and name for quick lookup
 	const inputMap = new Map();
+	const labelMap = new Map();
+	const typeMap = new Map();
+	
 	// biome-ignore lint/complexity/noForEach: <explanation>
 	originalInputs.forEach((input) => {
 		if (input.id) inputMap.set(input.id, input);
 		if (input.name) inputMap.set(input.name, input);
+		
+		// Also map by associated label text
+		if (input.id) {
+			const label = document.querySelector(`label[for="${input.id}"]`);
+			if (label) {
+				const labelText = label.textContent.trim().toLowerCase();
+				labelMap.set(labelText, input);
+			}
+		}
+		
+		// Group by input type
+		const type = input.type || input.tagName.toLowerCase();
+		if (!typeMap.has(type)) {
+			typeMap.set(type, []);
+		}
+		typeMap.get(type).push(input);
 	});
+
+	console.log("Virtual form input map:", Array.from(inputMap.keys()));
+	console.log("Virtual form label map:", Array.from(labelMap.keys()));
+	console.log("Virtual form type map:", Array.from(typeMap.keys()));
 
 	// Fill each mapped field
 	// biome-ignore lint/complexity/noForEach: <explanation>
 	mappings.forEach((mapping) => {
-		const { htmlElementId, value } = mapping;
-
-		// Try to find the original element by ID or name
-		const element = inputMap.get(htmlElementId);
+		const { htmlElementId, value, label, type } = mapping;
+		console.log(`Attempting to fill virtual element: ID=${htmlElementId}, Label=${label}, Type=${type}, Value=${value}`);
+		
+		// Try to find element by ID or name
+		let element = htmlElementId ? inputMap.get(htmlElementId) : null;
+		
+		// Try to find by label if ID/name fails
+		if (!element && label) {
+			const labelLower = label.toLowerCase();
+			
+			// Check exact label match
+			if (labelMap.has(labelLower)) {
+				element = labelMap.get(labelLower);
+				console.log(`Found element by exact label match: ${element.id || element.name}`);
+			} else {
+				// Check for partial label match
+				for (const [labelText, input] of labelMap.entries()) {
+					if (labelText.includes(labelLower) || labelLower.includes(labelText)) {
+						element = input;
+						console.log(`Found element by partial label match: ${element.id || element.name}`);
+						break;
+					}
+				}
+			}
+			
+			// If still no match, try to find any label in the DOM that matches
+			if (!element) {
+				console.log("Trying to find element by directly searching DOM labels");
+				const allLabels = document.querySelectorAll('label');
+				for (const domLabel of allLabels) {
+					const labelText = domLabel.textContent.trim().toLowerCase();
+					if (labelText === labelLower || labelText.includes(labelLower) || labelLower.includes(labelText)) {
+						// Found a matching label, now get the associated input
+						if (domLabel.getAttribute('for')) {
+							const inputId = domLabel.getAttribute('for');
+							const input = document.getElementById(inputId);
+							if (input) {
+								// For zen-process, we don't check if the input is in originalInputs
+								element = input;
+								console.log(`Found element via DOM label search: ${element.id || element.name}`);
+								break;
+							}
+						}
+						
+						// Check for inputs inside the label
+						const inputsInLabel = domLabel.querySelectorAll('input, select, textarea');
+						if (inputsInLabel.length > 0) {
+							// Take the first input in label
+							element = inputsInLabel[0];
+							console.log(`Found element inside label: ${element.id || element.name || 'unnamed'}`);
+							break;
+						}
+						
+						// Check for inputs near the label
+						if (!element) {
+							const parent = domLabel.parentElement;
+							if (parent) {
+								const nearbyInputs = parent.querySelectorAll('input, select, textarea');
+								if (nearbyInputs.length > 0) {
+									element = nearbyInputs[0];
+									console.log(`Found element near label: ${element.id || element.name || 'unnamed'}`);
+									break;
+								}
+							}
+						}
+						
+						// If still no element, look at siblings of parent
+						if (!element) {
+							const parent = domLabel.parentElement;
+							if (parent && parent.parentElement) {
+								const siblings = parent.parentElement.children;
+								for (const sibling of siblings) {
+									if (sibling !== parent) {
+										const inputs = sibling.querySelectorAll('input, select, textarea');
+										if (inputs.length > 0) {
+											element = inputs[0];
+											console.log(`Found element in sibling element: ${element.id || element.name || 'unnamed'}`);
+											break;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				
+				// If we found an element outside the original inputs, make sure it's valid to use
+				if (element && !originalInputs.includes(element)) {
+					// Add this element to our tracked elements
+					console.log(`Element found outside original inputs: ${element.id || element.name || 'unnamed'}`);
+					originalInputs.push(element);
+				}
+			}
+		}
+		
+		// Try to find by type and value for radio buttons
+		if (!element && type === "radio" && value) {
+			console.log(`Trying to find radio button with value: "${value}"`);
+			const radioButtons = typeMap.get("radio") || [];
+			for (const radio of radioButtons) {
+				if (radio.value === value) {
+					element = radio;
+					console.log(`Found radio button with value: ${value}`);
+					break;
+				}
+			}
+		}
+		
+		// Try to find by type only as a fallback
+		if (!element && type && typeMap.has(type)) {
+			const typeInputs = typeMap.get(type);
+			if (typeInputs.length > 0) {
+				// If we have multiple inputs of the same type, try to match by label
+				if (typeInputs.length > 1 && label) {
+					// Find the input closest to text that matches our label
+					for (const input of typeInputs) {
+						const inputRect = input.getBoundingClientRect();
+						
+						// Look for text containing our label near this input
+						let found = false;
+						const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+						let textNode;
+						
+						while (textNode = walker.nextNode()) {
+							const text = textNode.textContent.trim();
+							if (text.toLowerCase().includes(label.toLowerCase())) {
+								const textRect = textNode.parentElement.getBoundingClientRect();
+								// Check if within reasonable distance
+								const distance = Math.abs(textRect.top - inputRect.top) + Math.abs(textRect.left - inputRect.left);
+								if (distance < 200) { // arbitrary threshold
+									element = input;
+									console.log(`Found element by type and proximity to label: ${input.id || input.name}`);
+									found = true;
+									break;
+								}
+							}
+						}
+						
+						if (found) break;
+					}
+				}
+				
+				// If we still don't have an element, just take the first one of this type
+				if (!element) {
+					element = typeInputs[0];
+					console.log(`Using first ${type} element found: ${element.id || element.name || 'unnamed'}`);
+				}
+			}
+		}
+		
+		// If we still can't find it, try partial ID matching
+		if (!element && htmlElementId) {
+			for (const input of originalInputs) {
+				if ((input.id && input.id.includes(htmlElementId)) || 
+				    (input.name && input.name.includes(htmlElementId))) {
+					element = input;
+					console.log(`Found element by partial ID/name match: ${input.id || input.name}`);
+					break;
+				}
+			}
+		}
 
 		if (!element) {
 			console.warn(
-				`Original element with ID/name "${htmlElementId}" not found`,
+				`Original element with ID="${htmlElementId}", label="${label}", type="${type}" not found in virtual form`,
 			);
 			return;
 		}
 
 		// Fill the element
+		console.log(`Virtual element found, filling with value: ${value}`);
 		const filled = fillElement(element, value);
 		if (filled) {
 			filledFields.push(element);
+			console.log(`Successfully filled virtual element: ${element.id || element.name || 'unnamed'}`);
+		} else {
+			console.warn(`Failed to fill virtual element: ${element.id || element.name || 'unnamed'}`);
 		}
 	});
 
@@ -333,6 +723,8 @@ export function fillElement(element, value) {
 	const type = element.type ? element.type.toLowerCase() : "";
 
 	try {
+		console.log(`Filling ${tagName} (type=${type}) with value: "${value}"`);
+		
 		// Special handling for custom selects (e.g., gender dropdown)
 		if (tagName === "div" && element.id && element.id.startsWith("Select")) {
 			// Find the hidden input to set its value
@@ -341,19 +733,40 @@ export function fillElement(element, value) {
 				hiddenInput.value = value;
 				
 				// Find and update the visible selection text
-				const displayElement = element.querySelector('.sc-deXhhX');
+				const displayElement = element.querySelector('.sc-deXhhX') || 
+									  element.querySelector('[class*="select"]') || 
+									  element.querySelector('[class*="dropdown"]');
+                                      
 				if (displayElement) {
 					displayElement.textContent = value;
 				}
 				
 				// Find all options and mark the selected one
-				const options = element.querySelectorAll('.sc-epALIP');
+				const options = element.querySelectorAll('.sc-epALIP') || 
+							   element.querySelectorAll('[class*="option"]') || 
+							   element.querySelectorAll('li');
+                               
+				let optionFound = false;
 				for (const option of options) {
-					if (option.textContent.trim() === value) {
+					const optionText = option.textContent.trim();
+					if (optionText.toLowerCase() === value.toLowerCase() || 
+					    optionText.toLowerCase().includes(value.toLowerCase()) || 
+					    value.toLowerCase().includes(optionText.toLowerCase())) {
 						// Simulate selection event
-						option.click();
-						break;
+						try {
+							option.click();
+							optionFound = true;
+							console.log(`Clicked matching option: "${optionText}"`);
+							break;
+						} catch (e) {
+							console.warn(`Failed to click option: ${e.message}`);
+						}
 					}
+				}
+				
+				// If we couldn't find an option to click, at least set the value
+				if (!optionFound) {
+					console.log(`No matching option found, setting value directly`);
 				}
 				
 				// Mark the field as filled and highlight it
@@ -383,8 +796,19 @@ export function fillElement(element, value) {
 		) {
 			fillInputElement(element, value);
 		} else {
-			console.warn(`Unsupported element type: ${tagName} (${type})`);
-			return false;
+			// Try to handle custom elements or unknown types
+			if (element.isContentEditable) {
+				// Handle contenteditable elements
+				element.textContent = value;
+				console.log(`Filled contenteditable element`);
+			} else if (typeof element.value !== 'undefined') {
+				// Handle any element with a value property
+				element.value = value;
+				console.log(`Set value directly on element`);
+			} else {
+				console.warn(`Unsupported element type: ${tagName} (${type})`);
+				return false;
+			}
 		}
 
 		// Mark the field as filled and highlight it
@@ -407,22 +831,63 @@ export function fillElement(element, value) {
  * @param {string} value - The value to select
  */
 function fillSelectElement(element, value) {
-	// Check each option
+	console.log(`Filling select element ${element.id || element.name} with value "${value}"`);
+	console.log(`Available options:`, Array.from(element.options).map(opt => 
+		`${opt.value}: ${opt.textContent.trim()}`
+	));
+
+	// Check each option - first try exact match
 	let matched = false;
+	
 	for (const option of element.options) {
-		if (option.value === value || option.textContent.trim() === value) {
-			element.value = option.value;
+		const optionText = option.textContent.trim();
+		const optionValue = option.value;
+		
+		// Check for exact matches (case insensitive)
+		if (optionValue.toLowerCase() === value.toLowerCase() || 
+		    optionText.toLowerCase() === value.toLowerCase()) {
+			element.value = optionValue;
 			matched = true;
+			console.log(`Exact match found: "${optionText}" (${optionValue})`);
 			break;
 		}
 	}
 
+	// If no exact match, try for partial matches
 	if (!matched) {
-		// If no exact match, try a case-insensitive partial match
+		// Look for options containing the value
 		for (const option of element.options) {
-			if (option.textContent.toLowerCase().includes(value.toLowerCase())) {
+			const optionText = option.textContent.trim();
+			const optionValue = option.value;
+			
+			if (optionText.toLowerCase().includes(value.toLowerCase()) || 
+			    value.toLowerCase().includes(optionText.toLowerCase())) {
+				element.value = optionValue;
+				matched = true;
+				console.log(`Partial match found: "${optionText}" (${optionValue})`);
+				break;
+			}
+		}
+	}
+	
+	// Check if this is a select with a value that might be capitalized or formatted differently
+	if (!matched && typeof value === 'string') {
+		const valueLower = value.toLowerCase();
+		
+		// Try with a normalized version of the value (lowercase, no special chars)
+		const normalizeText = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+		const normalizedValue = normalizeText(value);
+		
+		for (const option of element.options) {
+			const optionText = option.textContent.trim();
+			const normalizedOption = normalizeText(optionText);
+			
+			if (normalizedOption === normalizedValue || 
+			    normalizedOption.includes(normalizedValue) || 
+			    normalizedValue.includes(normalizedOption)) {
 				element.value = option.value;
 				matched = true;
+				console.log(`Normalized match found: "${optionText}" (${option.value})`);
 				break;
 			}
 		}
@@ -430,7 +895,7 @@ function fillSelectElement(element, value) {
 
 	if (!matched) {
 		console.warn(
-			`Could not match value "${value}" to any option in select element`,
+			`Could not match value "${value}" to any option in select element ${element.id || element.name}`,
 		);
 	}
 }
@@ -442,33 +907,143 @@ function fillSelectElement(element, value) {
  * @param {string|boolean} value - The value to set
  */
 function fillCheckboxOrRadio(element, value) {
+	console.log(`Filling ${element.type} element ${element.id || element.name} with value "${value}"`);
+	
 	if (element.type === "checkbox") {
 		// For checkboxes, we use true/false
-		if (value === true || value === "true") {
+		const positiveValues = [
+			true, "true", "1", "yes", "sim", "verdadeiro", "checked", "selected", "on"
+		];
+		const negativeValues = [
+			false, "false", "0", "no", "não", "nao", "falso", "unchecked", "unselected", "off"
+		];
+		
+		// Convert to lowercase for string comparison
+		const valueLower = typeof value === "string" ? value.toLowerCase() : value;
+		
+		if (positiveValues.includes(valueLower)) {
 			element.checked = true;
-		} else if (value === false || value === "false") {
+			console.log(`Checkbox ${element.id || element.name} checked`);
+		} else if (negativeValues.includes(valueLower)) {
 			element.checked = false;
+			console.log(`Checkbox ${element.id || element.name} unchecked`);
 		} else {
-			console.warn(`Invalid value for checkbox: ${value}`);
+			// If it's not a clear true/false value, try to infer from context
+			const label = getAssociatedLabel(element);
+			const labelText = label ? label.textContent.trim().toLowerCase() : "";
+			
+			if (labelText && typeof value === "string") {
+				// If the value contains or is similar to the label text, check it
+				if (value.toLowerCase().includes(labelText) || 
+				    labelText.includes(value.toLowerCase())) {
+					element.checked = true;
+					console.log(`Checkbox ${element.id || element.name} checked based on label similarity`);
+				} else {
+					// Default to checked for agreement checkboxes (terms, privacy policy, etc.)
+					const agreementTerms = ["agree", "accept", "consent", "terms", "policy", "privacy", 
+					                       "newsletter", "email", "subscri", "offers", "news"];
+					                      
+					if (agreementTerms.some(term => labelText.includes(term))) {
+						element.checked = true;
+						console.log(`Checkbox ${element.id || element.name} checked as agreement checkbox`);
+					} else {
+						console.warn(`Could not determine checkbox value, defaulting to unchecked`);
+					}
+				}
+			} else {
+				console.warn(`Invalid value for checkbox: ${value}, leaving unchecked`);
+			}
 		}
 	} else if (element.type === "radio") {
-		// For radio buttons, we can handle string values
-		if (value === true || value === "true") {
-			// Simple case - just check this radio button
-			element.checked = true;
-		} else if (value === false || value === "false") {
-			// Simple case - uncheck this radio button
-			element.checked = false;
-		} else if (typeof value === "string") {
-			// Check if value matches this radio button's value or label
-			const label = getAssociatedLabel(element);
-			const labelText = label ? label.textContent.trim() : "";
-			
-			if (element.value === value || labelText === value) {
-				element.checked = true;
+		// For radio buttons, we need to be more flexible
+		const shouldCheck = (() => {
+			// Simple boolean values
+			if (value === true || value === "true" || value === "1" || 
+			    (typeof value === "string" && value.toLowerCase() === "yes")) {
+				return true;
 			}
-		} else {
-			console.warn(`Invalid value for radio button: ${value}`);
+			
+			// Special case handling for numbered values (common in forms)
+			if (element.value && value && element.value === value.toString()) {
+				return true;
+			}
+			
+			// Special case handling for PF/PJ (Pessoa Física / Pessoa Jurídica) in Brazil
+			if (element.value === "1" && (
+				typeof value === "string" && (
+					value.toLowerCase().includes("física") || 
+					value.toLowerCase().includes("fisica") || 
+					value.toLowerCase() === "pf"
+				))) {
+				return true;
+			}
+			
+			if (element.value === "2" && (
+				typeof value === "string" && (
+					value.toLowerCase().includes("jurídica") || 
+					value.toLowerCase().includes("juridica") || 
+					value.toLowerCase() === "pj"
+				))) {
+				return true;
+			}
+			
+			// Check if value directly matches this radio button's value
+			if (element.value === value) {
+				return true;
+			}
+			
+			// Check radio button's label for matches
+			const label = getAssociatedLabel(element);
+			if (label && typeof value === "string") {
+				const labelText = label.textContent.trim().toLowerCase();
+				const valueLower = value.toLowerCase();
+				
+				// Check for exact or partial matches between label and value
+				if (labelText === valueLower || 
+				    labelText.includes(valueLower) || 
+				    valueLower.includes(labelText)) {
+					return true;
+				}
+				
+				// For gender radio buttons
+				if ((labelText.includes("male") || labelText.includes("homem") || labelText === "m") && 
+				    (valueLower === "male" || valueLower === "homem" || valueLower === "m")) {
+					return true;
+				}
+				
+				if ((labelText.includes("female") || labelText.includes("mulher") || labelText === "f") && 
+				    (valueLower === "female" || valueLower === "mulher" || valueLower === "f")) {
+					return true;
+				}
+			}
+			
+			// Check if this radio is part of a group and its numerical value matches
+			if (element.name && document.getElementsByName(element.name).length > 1) {
+				// This radio is part of a group
+				const allRadios = document.getElementsByName(element.name);
+				const position = Array.from(allRadios).indexOf(element);
+				
+				// If value is a number and matches this radio's position (+1)
+				if (typeof value === "number" && value === position + 1) {
+					return true;
+				}
+				
+				// If value is a string number and matches this radio's position (+1)
+				if (typeof value === "string" && !isNaN(parseInt(value)) && 
+				    parseInt(value) === position + 1) {
+					return true;
+				}
+			}
+			
+			return false;
+		})();
+		
+		if (shouldCheck) {
+			element.checked = true;
+			console.log(`Radio button ${element.id || element.name} (${element.value}) checked`);
+			
+			// Dispatch events to ensure any change handlers are triggered
+			triggerEvents(element);
 		}
 	}
 }

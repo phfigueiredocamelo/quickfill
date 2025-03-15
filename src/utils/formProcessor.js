@@ -1,6 +1,5 @@
-import { processFormWithGPT } from "./gptProcessor";
+import { processFormWithGPT, processHTMLWithGPT } from "./gptProcessor";
 import {
-	extractFormElements,
 	fillFormWithMappings,
 	fillVirtualFormWithMappings,
 	createVirtualForm,
@@ -17,7 +16,7 @@ export class FormProcessor {
 		this.apiKey = settings.apiKey;
 		this.contextData = settings.contextData;
 		this.customFields = settings.customFields || {};
-		this.isEnabled = settings.enabled !== false;
+		this.isEnabled = settings.enabled === true;
 	}
 
 	/**
@@ -29,7 +28,7 @@ export class FormProcessor {
 		this.apiKey = settings.apiKey;
 		this.contextData = settings.contextData;
 		this.customFields = settings.customFields || {};
-		this.isEnabled = settings.enabled !== false;
+		this.isEnabled = settings.enabled === true;
 	}
 
 	/**
@@ -38,39 +37,103 @@ export class FormProcessor {
 	 * @returns {Promise<{filledCount: number}>} - Results of the filling operation
 	 */
 	async scanForForms() {
-		console.log(this.isEnabled, this.apiKey, this.contextData);
 		if (!this.isEnabled || !this.apiKey || !this.contextData) {
-			console.log("iAutoFill: Auto-fill is disabled or missing required data");
+			console.log("QuickFill: Auto-fill is disabled or missing required data");
 			return { filledCount: 0 };
 		}
 
 		try {
-			// Process each form and standalone inputs
-			const results = [];
-			let filledCount = 0;
+			// Extract form fields from the entire page HTML
+			const pageHTML = document.documentElement.outerHTML;
+			const pageURL = window.location.href;
 
-			// Import isElementVisible
-			const { isElementVisible } = await import("./formUtils");
+			// Process the HTML with GPT to extract form fields
+			const extractedFields = await processHTMLWithGPT({
+				apiKey: this.apiKey,
+				html: pageHTML,
+				url: pageURL,
+			});
 
-			// Find all forms on the page
-			const allForms = document.querySelectorAll("form");
-			console.log("Total forms found:", allForms.length);
-			
-			// Filter for only visible forms
-			const visibleForms = Array.from(allForms).filter(form => isElementVisible(form));
-			console.log("Visible forms found:", visibleForms.length);
+			console.log("Extracted fields:", extractedFields);
 
-			// Process visible regular forms
-			for (const form of visibleForms) {
-				const result = await this.processForm(form);
-				if (result) filledCount++;
-				results.push(result);
+			if (!extractedFields || extractedFields.length === 0) {
+				console.log("No form fields extracted from the page");
+				showNotification(
+					"No form fields could be detected on this page.",
+					"warning",
+				);
+				return { filledCount: 0 };
 			}
 
-			// Look for standalone inputs outside of forms
-			const standaloneInputsResult = await this.processStandaloneInputs();
-			if (standaloneInputsResult) {
-				filledCount += standaloneInputsResult;
+			// Process the extracted fields with the user context to get values
+			const filledFields = await processFormWithGPT({
+				apiKey: this.apiKey,
+				formElements: extractedFields,
+				userConversation: this.contextData,
+				formFieldHints: this.buildFieldHints(),
+			});
+
+			console.log("Filled fields:", filledFields);
+
+			if (!filledFields || filledFields.length === 0) {
+				console.log("No fields could be filled with the context data");
+				showNotification(
+					"No fields could be filled with the available context data.",
+					"warning",
+				);
+				return { filledCount: 0 };
+			}
+
+			// Group the filled fields by formId
+			const formFieldGroups = this.groupFieldsByForm(filledFields);
+
+			// Fill each form with its fields
+			let filledCount = 0;
+			
+			// For zen-process, try direct filling first
+			// This handles cases where fields aren't properly associated with forms
+			console.log("Trying zen-process direct field filling first");
+			let zenFilledCount = 0;
+			
+			// Create a general document form object for zen processing
+			const documentForm = document.body;
+			const allMappings = this.convertToLegacyFormat(filledFields);
+			
+			// Mark that we're using zen-process mode
+			documentForm.zenProcess = true;
+			
+			// Try to fill all fields directly on the document body
+			zenFilledCount = fillFormWithMappings(documentForm, allMappings);
+			console.log(`Zen-process filled ${zenFilledCount} fields directly`);
+			
+			// If zen-process was successful, count it as one form filled
+			if (zenFilledCount > 0) {
+				filledCount++;
+			} else {
+				// Fallback to the regular form-by-form approach
+				console.log("Falling back to regular form-by-form filling");
+				
+				for (const [formId, fields] of formFieldGroups.entries()) {
+					if (formId.startsWith("virtual-")) {
+						// Handle virtual forms (standalone inputs)
+						const filledFieldCount = await this.fillStandaloneInputs(fields);
+						if (filledFieldCount > 0) filledCount++;
+					} else {
+						// Handle regular forms
+						const form =
+							document.getElementById(formId) ||
+							document.querySelector(`form[name="${formId}"]`) ||
+							document.forms[0];
+
+						if (form) {
+							const filledFieldCount = fillFormWithMappings(
+								form,
+								this.convertToLegacyFormat(fields),
+							);
+							if (filledFieldCount > 0) filledCount++;
+						}
+					}
+				}
 			}
 
 			// Notify user about the results
@@ -95,6 +158,157 @@ export class FormProcessor {
 	}
 
 	/**
+	 * Group fields by their form ID
+	 *
+	 * @param {Array} fields - Array of field objects with formId
+	 * @returns {Map} - Map of formId to array of fields
+	 */
+	groupFieldsByForm(fields) {
+		const groups = new Map();
+
+		fields.forEach((field) => {
+			if (!field.formId) return;
+
+			if (!groups.has(field.formId)) {
+				groups.set(field.formId, []);
+			}
+
+			groups.get(field.formId).push(field);
+		});
+
+		return groups;
+	}
+
+	/**
+	 * Convert the new field format to the legacy format used by fillFormWithMappings
+	 * Includes label information for improved matching
+	 *
+	 * @param {Array} fields - Array of fields in new format
+	 * @returns {Array} - Array of fields in legacy format
+	 */
+	convertToLegacyFormat(fields) {
+		return fields.map((field) => ({
+			htmlElementId: field.id,
+			value: field.value,
+			label: field.label,          // Include label for label-based matching
+			formId: field.formId        // Include formId for form-based matching
+		}));
+	}
+
+	/**
+	 * Fill standalone inputs (not in forms) with the mapped values
+	 *
+	 * @param {Array} fields - Array of field objects to fill
+	 * @returns {Promise<number>} - Number of fields filled
+	 */
+	async fillStandaloneInputs(fields) {
+		try {
+			// Find all standalone inputs
+			const { isElementVisible } = await import("./formUtils");
+			const allStandaloneInputs = document.querySelectorAll(
+				INPUT_SELECTORS.STANDALONE_COMBINED,
+			);
+
+			// Filter for visible inputs
+			const visibleStandaloneInputs = Array.from(allStandaloneInputs).filter(
+				(input) => isElementVisible(input),
+			);
+
+			if (visibleStandaloneInputs.length === 0) {
+				return 0;
+			}
+
+			// Create a map of inputs by ID, name or label association
+			const inputMap = new Map();
+			const labelMap = new Map();
+			const formIdMap = new Map();
+
+			visibleStandaloneInputs.forEach((input) => {
+				// Store by ID and name
+				if (input.id) inputMap.set(input.id, input);
+				if (input.name) inputMap.set(input.name, input);
+				
+				// Store by associated label text
+				if (input.id) {
+					const label = document.querySelector(`label[for="${input.id}"]`);
+					if (label && label.textContent) {
+						const labelText = label.textContent.trim();
+						labelMap.set(labelText.toLowerCase(), input);
+					}
+				}
+				
+				// Store by form ID association
+				const closestForm = input.closest('form');
+				if (closestForm && closestForm.id) {
+					formIdMap.set(closestForm.id, input);
+				}
+			});
+
+			// Find inputs that match the fields to fill
+			const matchedInputs = [];
+			fields.forEach((field) => {
+				// Try to match by ID first
+				let input = inputMap.get(field.id);
+				
+				// If no match by ID, try by label
+				if (!input && field.label) {
+					input = labelMap.get(field.label.toLowerCase());
+				}
+				
+				// If still no match, try by formId
+				if (!input && field.formId && !field.formId.startsWith('virtual-')) {
+					input = formIdMap.get(field.formId);
+				}
+				
+				if (input) {
+					matchedInputs.push({
+						input,
+						value: field.value,
+					});
+				}
+			});
+
+			if (matchedInputs.length === 0) {
+				return 0;
+			}
+
+			// Group inputs by container
+			const inputGroups = groupInputsByContainer(
+				matchedInputs.map((m) => m.input),
+			);
+			let filledGroups = 0;
+
+			// Process each group of inputs
+			for (const group of inputGroups) {
+				if (group.inputs.length === 0) continue;
+
+				// Create a virtual form for these inputs
+				const virtualForm = createVirtualForm(group.inputs);
+
+				// Map the matched inputs to the virtual form format
+				const virtualFormMappings = matchedInputs
+					.filter((match) => group.inputs.includes(match.input))
+					.map((match) => ({
+						htmlElementId: match.input.id || match.input.name,
+						value: match.value,
+					}));
+
+				// Fill the virtual form
+				const filledCount = fillVirtualFormWithMappings(
+					virtualForm,
+					virtualFormMappings,
+				);
+				if (filledCount > 0) filledGroups++;
+			}
+
+			return filledGroups;
+		} catch (error) {
+			console.error("Error filling standalone inputs:", error);
+			return 0;
+		}
+	}
+
+	/**
 	 * Build hints for form fields from custom field data
 	 *
 	 * @returns {string} - Formatted field hints
@@ -115,65 +329,6 @@ export class FormProcessor {
 	}
 
 	/**
-	 * Process standalone inputs that aren't within form elements
-	 *
-	 * @returns {Promise<number>} - Number of input groups successfully filled
-	 */
-	async processStandaloneInputs() {
-		try {
-			// Find all inputs that are not within a form
-			const allStandaloneInputs = document.querySelectorAll(
-				INPUT_SELECTORS.STANDALONE_COMBINED,
-			);
-
-			if (allStandaloneInputs.length === 0) {
-				console.log("iAutoFill: No standalone inputs found");
-				return 0;
-			}
-
-			// Filter for only visible standalone inputs
-			const { isElementVisible } = await import("./formUtils");
-			const visibleStandaloneInputs = Array.from(allStandaloneInputs).filter(
-				(input) => isElementVisible(input)
-			);
-
-			console.log(
-				"iAutoFill: Found",
-				visibleStandaloneInputs.length,
-				"visible standalone inputs out of",
-				allStandaloneInputs.length,
-				"total"
-			);
-
-			if (visibleStandaloneInputs.length === 0) {
-				return 0;
-			}
-
-			// Group inputs by their nearest common container
-			const inputGroups = groupInputsByContainer(visibleStandaloneInputs);
-
-			// Process each group
-			let filledGroups = 0;
-
-			for (const group of inputGroups) {
-				if (group.inputs.length === 0) continue;
-
-				// Create a virtual form containing these inputs for processing
-				const virtualForm = createVirtualForm(group.inputs);
-
-				// Process the virtual form
-				const result = await this.processForm(virtualForm, true);
-				if (result) filledGroups++;
-			}
-
-			return filledGroups;
-		} catch (error) {
-			console.error("iAutoFill: Error processing standalone inputs:", error);
-			return 0;
-		}
-	}
-
-	/**
 	 * Process a specific form or virtual form with GPT and fill it with data
 	 *
 	 * @param {HTMLFormElement|HTMLElement} form - The form or virtual form to process
@@ -183,32 +338,48 @@ export class FormProcessor {
 	 */
 	async processForm(form, isVirtual = false, customContext = null) {
 		try {
-			// Extract form elements for analysis
-			const formElements = extractFormElements(form);
+			// Extract form HTML
+			const formHTML = form.outerHTML;
+			const pageURL = window.location.href;
 
-			// Extract hints for form fields from custom data
-			const formFieldHints = this.buildFieldHints();
+			// Process the form HTML with GPT to extract fields
+			const extractedFields = await processHTMLWithGPT({
+				apiKey: this.apiKey,
+				html: formHTML,
+				url: pageURL,
+			});
+
+			if (!extractedFields || extractedFields.length === 0) {
+				console.log("No fields extracted from form");
+				return false;
+			}
 
 			// Use custom context if provided
 			const contextToUse = customContext || this.contextData;
 
-			// Process the form with GPT
-			const mappings = await processFormWithGPT({
+			// Process the extracted fields with context to get values
+			const filledFields = await processFormWithGPT({
 				apiKey: this.apiKey,
-				formElements,
+				formElements: extractedFields,
 				userConversation: contextToUse,
-				formFieldHints,
+				formFieldHints: this.buildFieldHints(),
 			});
 
 			// Fill the form with the mappings
 			let filledCount = 0;
-			if (mappings && mappings.length > 0) {
+			if (filledFields && filledFields.length > 0) {
 				if (isVirtual) {
 					// For virtual forms, fill the original inputs
-					filledCount = fillVirtualFormWithMappings(form, mappings);
+					filledCount = fillVirtualFormWithMappings(
+						form,
+						this.convertToLegacyFormat(filledFields),
+					);
 				} else {
 					// For regular forms, fill normally
-					filledCount = fillFormWithMappings(form, mappings);
+					filledCount = fillFormWithMappings(
+						form,
+						this.convertToLegacyFormat(filledFields),
+					);
 				}
 				return filledCount > 0;
 			}

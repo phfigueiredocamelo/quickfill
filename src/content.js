@@ -1,7 +1,7 @@
 import { FormProcessor } from "./utils/formProcessor";
 import { collectFormData } from "./utils/formUtils";
 import { DOMObserver, addStyles } from "./utils/domObserver";
-import { DEFAULT_SETTINGS } from "./utils/constants";
+import { DEFAULT_SETTINGS, INPUT_SELECTORS } from "./utils/constants";
 
 /**
  * QuickFill Content Script
@@ -23,18 +23,11 @@ window.addEventListener("load", async () => {
 		// Inicializa o processador de formulários com as configurações
 		formProcessor = new FormProcessor(items);
 
-		// Se o auto-preenchimento está habilitado e temos os dados necessários, escaneia formulários
-		if (
-			formProcessor.isEnabled &&
-			formProcessor.apiKey &&
-			formProcessor.contextData
-		) {
-			// Adiciona um pequeno atraso para garantir que a página esteja totalmente carregada
-			setTimeout(scanForForms, 1000);
+		// Configura o observador DOM apenas se a extensão estiver habilitada
+		if (formProcessor.isEnabled) {
+			// Configura o observador DOM para detectar formulários adicionados dinamicamente
+			setupDynamicFormObserver();
 		}
-
-		// Configura o observador DOM para detectar formulários adicionados dinamicamente
-		setupDynamicFormObserver();
 	});
 
 	// Adiciona estilos CSS necessários
@@ -59,10 +52,14 @@ function setupDynamicFormObserver() {
 
 	// Cria o observador DOM com callback para scan de formulários
 	domObserver = new DOMObserver(() => {
-		scanForForms();
+		// Em vez de escanear imediatamente, vamos verificar se a página mudou significativamente
+		// para evitar processamento desnecessário
+		// Só escaneia se o DOM tiver mudanças significativas (novos formulários ou inputs)
+		// Não executa scanForForms automaticamente, apenas quando solicitado pelo usuário
+		console.log("QuickFill: DOM changes detected, ready for form filling when requested");
 	});
 
-	// Inicia a observação após o scan inicial
+	// Inicia a observação
 	setTimeout(() => {
 		domObserver.startObserving();
 	}, 1500);

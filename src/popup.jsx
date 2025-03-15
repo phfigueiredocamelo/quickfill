@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./popup.css";
 
 const Popup = () => {
-	const [enabled, setEnabled] = useState(true);
+	const [enabled, setEnabled] = useState(false);
 	const [apiKey, setApiKey] = useState("");
 	const [contextData, setContextData] = useState("");
 	const [customFields, setCustomFields] = useState({});
@@ -15,7 +15,7 @@ const Popup = () => {
 	useEffect(() => {
 		chrome.storage.sync.get(
 			{
-				enabled: true,
+				enabled: false,
 				apiKey: "",
 				contextData: "",
 				customFields: {},
@@ -29,43 +29,22 @@ const Popup = () => {
 		);
 	}, []);
 
-	// Save settings to storage
-	const saveSettings = () => {
-		setIsLoading(true);
-		setStatus("");
-
+	// Save custom fields to storage
+	const saveCustomFields = (updatedFields) => {
 		chrome.storage.sync.set(
 			{
-				enabled,
-				apiKey,
-				contextData,
-				customFields,
+				customFields: updatedFields,
 			},
 			() => {
-				setStatus("Settings saved successfully!");
-
 				// Send message to content script to update settings
 				chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
 					if (tabs[0]) {
-						console.log("Sending message to update settings:", {
-							enabled,
-							apiKey,
-							contextData,
-							customFields,
-						});
 						chrome.tabs.sendMessage(tabs[0].id, {
 							action: "updateSettings",
-							settings: { enabled, apiKey, contextData, customFields },
+							settings: { enabled, apiKey, contextData, customFields: updatedFields },
 						});
 					}
 				});
-
-				setIsLoading(false);
-
-				// Clear status message after 3 seconds
-				setTimeout(() => {
-					setStatus("");
-				}, 3000);
 			},
 		);
 	};
@@ -102,10 +81,12 @@ const Popup = () => {
 
 	// Add a new custom field
 	const addCustomField = () => {
-		setCustomFields({
+		const updatedFields = {
 			...customFields,
 			"": "",
-		});
+		};
+		setCustomFields(updatedFields);
+		saveCustomFields(updatedFields);
 	};
 
 	// Update a custom field key or value
@@ -114,6 +95,7 @@ const Popup = () => {
 		delete updatedFields[oldKey];
 		updatedFields[newKey] = value;
 		setCustomFields(updatedFields);
+		saveCustomFields(updatedFields);
 	};
 
 	// Remove a custom field
@@ -121,6 +103,7 @@ const Popup = () => {
 		const updatedFields = { ...customFields };
 		delete updatedFields[key];
 		setCustomFields(updatedFields);
+		saveCustomFields(updatedFields);
 	};
 
 	return (
@@ -132,7 +115,23 @@ const Popup = () => {
 						<input
 							type="checkbox"
 							checked={enabled}
-							onChange={() => setEnabled(!enabled)}
+							onChange={() => {
+								const newEnabled = !enabled;
+								setEnabled(newEnabled);
+								
+								// Save the enabled state immediately
+								chrome.storage.sync.set({ enabled: newEnabled }, () => {
+									// Send message to content script to update settings
+									chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+										if (tabs[0]) {
+											chrome.tabs.sendMessage(tabs[0].id, {
+												action: "updateSettings",
+												settings: { enabled: newEnabled, apiKey, contextData, customFields },
+											});
+										}
+									});
+								});
+							}}
 						/>
 						<span className="toggle-slider"></span>
 					</label>
@@ -170,7 +169,23 @@ const Popup = () => {
 								type="password"
 								id="apiKey"
 								value={apiKey}
-								onChange={(e) => setApiKey(e.target.value)}
+								onChange={(e) => {
+									const newApiKey = e.target.value;
+									setApiKey(newApiKey);
+									
+									// Save the API key immediately
+									chrome.storage.sync.set({ apiKey: newApiKey }, () => {
+										// Send message to content script to update settings
+										chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+											if (tabs[0]) {
+												chrome.tabs.sendMessage(tabs[0].id, {
+													action: "updateSettings",
+													settings: { enabled, apiKey: newApiKey, contextData, customFields },
+												});
+											}
+										});
+									});
+								}}
 								placeholder="sk-..."
 							/>
 						</div>
@@ -190,7 +205,23 @@ const Popup = () => {
 							<textarea
 								id="contextData"
 								value={contextData}
-								onChange={(e) => setContextData(e.target.value)}
+								onChange={(e) => {
+									const newContextData = e.target.value;
+									setContextData(newContextData);
+									
+									// Save the context data immediately
+									chrome.storage.sync.set({ contextData: newContextData }, () => {
+										// Send message to content script to update settings
+										chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+											if (tabs[0]) {
+												chrome.tabs.sendMessage(tabs[0].id, {
+													action: "updateSettings",
+													settings: { enabled, apiKey, contextData: newContextData, customFields },
+												});
+											}
+										});
+									});
+								}}
 								placeholder="Add user context information here (e.g., name, email, phone number, address, etc.)"
 								rows={8}
 							/>
@@ -245,13 +276,6 @@ const Popup = () => {
 						disabled={isLoading || !enabled || !apiKey}
 					>
 						{isLoading ? "Processing..." : "Fill Forms"}
-					</button>
-					<button
-						className="save-btn"
-						onClick={saveSettings}
-						disabled={isLoading}
-					>
-						{isLoading ? "Saving..." : "Save Settings"}
 					</button>
 				</div>
 
