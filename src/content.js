@@ -71,11 +71,67 @@ function setupDynamicFormObserver() {
 function setupMessageListener() {
 	chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		if (message.action === "fillForms") {
+			// Inicializa array de logs se o logToPopup estiver habilitado
+			const logs = message.logToPopup ? [] : null;
+			
+			if (logs) {
+				logs.push({ text: "Scanning page for forms and fields...", type: "info" });
+			}
+			
+			// Adiciona listener para capturar logs de console se logToPopup estiver habilitado
+			if (message.logToPopup) {
+				const originalConsoleLog = console.log;
+				console.log = function() {
+					// Captura o log original
+					originalConsoleLog.apply(console, arguments);
+					
+					// Apenas adiciona ao array de logs mensagens relevantes ao preenchimento
+					const logText = Array.from(arguments).join(' ');
+					if (logText.includes('field') || logText.includes('form') || 
+						logText.includes('input') || logText.includes('Fill')) {
+						// Formata o texto do log: limpa espaços extras e adiciona emoji baseado no tipo
+						const cleanText = logText.replace(/\s+/g, ' ').trim();
+						const logType = logText.includes('Success') ? 'success' : 
+							          logText.includes('Error') || logText.includes('failed') ? 'error' : 
+							          logText.includes('Warning') ? 'warning' : 'info';
+						
+						// Adiciona emoji correspondente ao tipo de log
+						const emoji = logType === 'success' ? '✅ ' : 
+								    logType === 'error' ? '❌ ' :
+								    logType === 'warning' ? '⚠️ ' : 'ℹ️ ';
+						
+						logs.push({ 
+							text: emoji + cleanText,
+							type: logType
+						});
+					}
+				};
+				
+				// Restaura o console.log após a operação
+				setTimeout(() => {
+					console.log = originalConsoleLog;
+				}, 10000); // Timeout de segurança caso algo dê errado
+			}
+			
 			scanForForms()
-				.then(() => sendResponse({ success: true }))
-				.catch((error) =>
-					sendResponse({ success: false, error: error.message }),
-				);
+				.then(() => {
+					if (logs) {
+						logs.push({ text: "✅ Form processing complete", type: "success" });
+					}
+					sendResponse({ success: true, logs });
+				})
+				.catch((error) => {
+					if (logs) {
+						logs.push({ text: `❌ Error processing forms: ${error.message}`, type: "error" });
+					}
+					sendResponse({ success: false, error: error.message, logs });
+				})
+				.finally(() => {
+					// Restaura o console.log original se foi substituído
+					if (message.logToPopup) {
+						console.log = originalConsoleLog;
+					}
+				});
 			return true; // Indica resposta assíncrona
 		}
 

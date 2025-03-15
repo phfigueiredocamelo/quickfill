@@ -280,3 +280,75 @@ input:checked + .toggle-slider:before {
   font-size: 14px;
   text-align: center;
 }
+
+/* Log container styles */
+.log-container {
+  margin-top: 15px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--background-light);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: #f0f0f0;
+}
+
+.log-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.clear-log-btn {
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.clear-log-btn:hover {
+  background-color: #e8e8e8;
+}
+
+.log-messages {
+  padding: 8px 12px;
+}
+
+.log-message {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-bottom: 1px solid #eee;
+  position: relative;
+}
+
+.log-message:last-child {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.log-message.info {
+  color: var(--primary-color);
+}
+
+.log-message.success {
+  color: var(--success-color);
+}
+
+.log-message.warning {
+  color: var(--warning-color);
+}
+
+.log-message.error {
+  color: var(--danger-color);
+}

@@ -10,6 +10,7 @@ const Popup = () => {
 	const [activeTab, setActiveTab] = useState("settings");
 	const [status, setStatus] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
+	const [logMessages, setLogMessages] = useState([]);
 
 	// Load settings from storage when component mounts
 	useEffect(() => {
@@ -49,23 +50,40 @@ const Popup = () => {
 		);
 	};
 
+	// Clear log messages
+	const clearLogs = () => {
+		setLogMessages([]);
+	};
+
 	// Fill forms on the current page
 	const fillForms = () => {
 		setIsLoading(true);
 		setStatus("");
+		setLogMessages([{ text: "Starting form filling process...", type: "info" }]);
 
 		chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
 			if (tabs[0]) {
 				chrome.tabs.sendMessage(
 					tabs[0].id,
-					{ action: "fillForms" },
+					{ 
+						action: "fillForms",
+						logToPopup: true 
+					},
 					(response) => {
 						if (chrome.runtime.lastError) {
 							setStatus("Error: Could not connect to page.");
+							setLogMessages(prev => [...prev, { text: "Error: Could not connect to page.", type: "error" }]);
 						} else if (response && response.success) {
 							setStatus("Forms filled successfully!");
+							if (response.logs && response.logs.length > 0) {
+								setLogMessages(prev => [...prev, ...response.logs]);
+							}
+							setLogMessages(prev => [...prev, { text: "Forms filled successfully!", type: "success" }]);
 						} else {
 							setStatus("Error filling forms.");
+							if (response && response.error) {
+								setLogMessages(prev => [...prev, { text: `Error: ${response.error}`, type: "error" }]);
+							}
 						}
 						setIsLoading(false);
 
@@ -280,6 +298,22 @@ const Popup = () => {
 				</div>
 
 				{status && <div className="status-message">{status}</div>}
+				
+				{logMessages.length > 0 && (
+					<div className="log-container">
+						<div className="log-header">
+							<h3>Form Filling Log</h3>
+							<button className="clear-log-btn" onClick={clearLogs}>Clear</button>
+						</div>
+						<div className="log-messages">
+							{logMessages.map((log, index) => (
+								<div key={index} className={`log-message ${log.type}`}>
+									{log.text}
+								</div>
+							))}
+						</div>
+					</div>
+				)}
 			</div>
 		</div>
 	);
