@@ -55,8 +55,9 @@ function setupDynamicFormObserver() {
 		// Em vez de escanear imediatamente, vamos verificar se a página mudou significativamente
 		// para evitar processamento desnecessário
 		// Só escaneia se o DOM tiver mudanças significativas (novos formulários ou inputs)
-		// Não executa scanForForms automaticamente, apenas quando solicitado pelo usuário
-		console.log("QuickFill: DOM changes detected, ready for form filling when requested");
+		console.log(
+			"QuickFill: DOM changes detected, ready for form filling when requested",
+		);
 	});
 
 	// Inicia a observação
@@ -73,65 +74,62 @@ function setupMessageListener() {
 		if (message.action === "fillForms") {
 			// Inicializa array de logs se o logToPopup estiver habilitado
 			const logs = message.logToPopup ? [] : null;
-			
+
 			if (logs) {
-				logs.push({ text: "Scanning page for forms and fields...", type: "info" });
+				logs.push({
+					text: "Scanning page for forms and fields...",
+					type: "info",
+				});
 			}
-			
+
 			// Adiciona listener para capturar logs de console se logToPopup estiver habilitado
 			if (message.logToPopup) {
 				const originalConsoleLog = console.log;
-				console.log = function() {
+				console.log = function () {
 					// Captura o log original
 					originalConsoleLog.apply(console, arguments);
-					
+
 					// Apenas adiciona ao array de logs mensagens relevantes ao preenchimento
-					const logText = Array.from(arguments).join(' ');
-					if (logText.includes('field') || logText.includes('form') || 
-						logText.includes('input') || logText.includes('Fill')) {
+					const logText = Array.from(arguments).join(" ");
+					if (
+						logText.includes("field") ||
+						logText.includes("form") ||
+						logText.includes("input") ||
+						logText.includes("Fill")
+					) {
 						// Formata o texto do log: limpa espaços extras e adiciona emoji baseado no tipo
-						const cleanText = logText.replace(/\s+/g, ' ').trim();
-						const logType = logText.includes('Success') ? 'success' : 
-							          logText.includes('Error') || logText.includes('failed') ? 'error' : 
-							          logText.includes('Warning') ? 'warning' : 'info';
-						
+						const cleanText = logText.replace(/\s+/g, " ").trim();
+						const logType = logText.includes("Success")
+							? "success"
+							: logText.includes("Error") || logText.includes("failed")
+								? "error"
+								: logText.includes("Warning")
+									? "warning"
+									: "info";
+
 						// Adiciona emoji correspondente ao tipo de log
-						const emoji = logType === 'success' ? '✅ ' : 
-								    logType === 'error' ? '❌ ' :
-								    logType === 'warning' ? '⚠️ ' : 'ℹ️ ';
-						
-						logs.push({ 
+						const emoji =
+							logType === "success"
+								? "✅ "
+								: logType === "error"
+									? "❌ "
+									: logType === "warning"
+										? "⚠️ "
+										: "ℹ️ ";
+
+						logs.push({
 							text: emoji + cleanText,
-							type: logType
+							type: logType,
 						});
 					}
 				};
-				
+
 				// Restaura o console.log após a operação
 				setTimeout(() => {
 					console.log = originalConsoleLog;
 				}, 10000); // Timeout de segurança caso algo dê errado
 			}
-			
-			scanForForms()
-				.then(() => {
-					if (logs) {
-						logs.push({ text: "✅ Form processing complete", type: "success" });
-					}
-					sendResponse({ success: true, logs });
-				})
-				.catch((error) => {
-					if (logs) {
-						logs.push({ text: `❌ Error processing forms: ${error.message}`, type: "error" });
-					}
-					sendResponse({ success: false, error: error.message, logs });
-				})
-				.finally(() => {
-					// Restaura o console.log original se foi substituído
-					if (message.logToPopup) {
-						console.log = originalConsoleLog;
-					}
-				});
+
 			return true; // Indica resposta assíncrona
 		}
 
@@ -165,10 +163,9 @@ async function handleProcessFormRequest(message, sendResponse) {
 
 	try {
 		// Importa a função de verificação de visibilidade
-		const { isElementVisible, groupInputsByContainer, createVirtualForm } = await import(
-			"./utils/formUtils"
-		);
-		
+		const { isElementVisible, groupInputsByContainer, createVirtualForm } =
+			await import("./utils/formUtils");
+
 		// Encontra o formulário pelo ID
 		let formElement = null;
 		let isVirtual = false;
@@ -179,9 +176,9 @@ async function handleProcessFormRequest(message, sendResponse) {
 			const allStandaloneInputs = document.querySelectorAll(
 				'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not(form *), select:not(form *), textarea:not(form *)',
 			);
-			
+
 			const visibleStandaloneInputs = Array.from(allStandaloneInputs).filter(
-				input => isElementVisible(input)
+				(input) => isElementVisible(input),
 			);
 
 			if (!visibleStandaloneInputs.length) {
@@ -209,7 +206,7 @@ async function handleProcessFormRequest(message, sendResponse) {
 				document.querySelector(`form[action="${formId}"]`) ||
 				document.forms[Number.parseInt(formId)] ||
 				null;
-				
+
 			// Verifica se o formulário está visível
 			if (formElement && !isElementVisible(formElement)) {
 				sendResponse({
@@ -248,29 +245,5 @@ async function handleProcessFormRequest(message, sendResponse) {
 			success: false,
 			message: `Erro ao processar formulário: ${error.message}`,
 		});
-	}
-}
-
-/**
- * Escaneia a página por formulários e tenta preenchê-los
- */
-async function scanForForms() {
-	if (!formProcessor) {
-		console.log("QuickFill: Processador de formulários não inicializado");
-		return;
-	}
-
-	try {
-		// Processa formulários com o processador
-		const result = await formProcessor.scanForForms();
-		return result;
-	} catch (error) {
-		console.error("QuickFill: Erro ao preencher formulários:", error);
-		const { showNotification } = await import("./utils/notification");
-		showNotification(
-			`Erro ao preencher formulários: ${error.message}`,
-			"error",
-		);
-		throw error;
 	}
 }

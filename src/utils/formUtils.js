@@ -6,31 +6,31 @@ import { INPUT_SELECTORS, STYLES } from "./constants";
 
 /**
  * Checks if an element is visible in the viewport
- * 
+ *
  * @param {Element} element - The element to check
  * @returns {boolean} - Whether the element is visible
  */
 export function isElementVisible(element) {
-  // Check if element exists
-  if (!element) return false;
-  
-  // Check if element or any parent has display:none or visibility:hidden
-  const style = window.getComputedStyle(element);
-  if (style.display === 'none' || style.visibility === 'hidden') return false;
+	// Check if element exists
+	if (!element) return false;
 
-  // Check if element is in viewport
-  const rect = element.getBoundingClientRect();
-  
-  // Element must have size to be considered visible
-  if (rect.width === 0 || rect.height === 0) return false;
-  
-  // Element must be at least partially in the viewport
-  return (
-    rect.top < window.innerHeight &&
-    rect.bottom > 0 &&
-    rect.left < window.innerWidth &&
-    rect.right > 0
-  );
+	// Check if element or any parent has display:none or visibility:hidden
+	const style = window.getComputedStyle(element);
+	if (style.display === "none" || style.visibility === "hidden") return false;
+
+	// Check if element is in viewport
+	const rect = element.getBoundingClientRect();
+
+	// Element must have size to be considered visible
+	if (rect.width === 0 || rect.height === 0) return false;
+
+	// Element must be at least partially in the viewport
+	return (
+		rect.top < window.innerHeight &&
+		rect.bottom > 0 &&
+		rect.left < window.innerWidth &&
+		rect.right > 0
+	);
 }
 
 /**
@@ -81,7 +81,7 @@ export function extractFormElements(formElement) {
 		.filter((element) => {
 			// For virtual forms, we don't check visibility since they're clones
 			if (formElement.className === "quickfill-virtual-form") return true;
-			
+
 			// For real forms, only include visible elements
 			return isElementVisible(element);
 		})
@@ -108,11 +108,13 @@ export function extractFormElements(formElement) {
 					text: option.textContent.trim(),
 				}));
 			}
-			
+
 			// Extract radio button groups
 			if (element.type === "radio" && element.name) {
 				// Find all radio buttons in the same group
-				const radioGroup = formElement.querySelectorAll(`input[type="radio"][name="${element.name}"]`);
+				const radioGroup = formElement.querySelectorAll(
+					`input[type="radio"][name="${element.name}"]`,
+				);
 				if (radioGroup.length > 1) {
 					elementInfo.options = Array.from(radioGroup).map((radio) => {
 						// Get label for this specific radio button
@@ -124,19 +126,22 @@ export function extractFormElements(formElement) {
 					});
 				}
 			}
-			
+
 			// For checkbox elements, add more context
 			if (element.type === "checkbox") {
 				// Add checkbox label as a possible option value
 				const checkLabel = getAssociatedLabel(element);
 				if (checkLabel) {
-					elementInfo.options = [{
-						value: "true",
-						text: checkLabel.textContent.trim()
-					}, {
-						value: "false",
-						text: `Not ${checkLabel.textContent.trim()}`
-					}];
+					elementInfo.options = [
+						{
+							value: "true",
+							text: checkLabel.textContent.trim(),
+						},
+						{
+							value: "false",
+							text: `Not ${checkLabel.textContent.trim()}`,
+						},
+					];
 				}
 			}
 
@@ -248,132 +253,169 @@ export function fillFormWithMappings(form, mappings) {
 	// biome-ignore lint/complexity/noForEach: <explanation>
 	mappings.forEach((mapping) => {
 		const { htmlElementId, value, label, type } = mapping;
-		console.log(`Attempting to fill element: ID=${htmlElementId}, Label=${label}, Type=${type}, Value=${value}`);
+		console.log(
+			`Attempting to fill element: ID=${htmlElementId}, Label=${label}, Type=${type}, Value=${value}`,
+		);
 
 		// Try to find the element by ID or name
 		let element = null;
-		
+
 		if (htmlElementId) {
 			try {
 				// Use safe selectors - escape special characters in ID
 				const safeId = CSS.escape(htmlElementId);
-				element = form.querySelector(`#${safeId}`) || 
-						form.querySelector(`[name="${safeId}"]`);
+				element =
+					form.querySelector(`#${safeId}`) ||
+					form.querySelector(`[name="${safeId}"]`);
 			} catch (e) {
 				console.warn("Error using CSS.escape:", e);
 				// Fallback to direct query if CSS.escape fails
-				element = form.querySelector(`#${htmlElementId}`) || 
-						form.querySelector(`[name="${htmlElementId}"]`);
+				element =
+					form.querySelector(`#${htmlElementId}`) ||
+					form.querySelector(`[name="${htmlElementId}"]`);
 			}
 		}
 
 		// Try to find by label if ID/name fails
 		if (!element && label) {
 			console.log(`Trying to find element by label: "${label}"`);
-			
+
 			// Use document-wide search when in zen mode or first try failed
 			const useZenMode = form.zenProcess === true;
-			
+
 			// Try document-wide search for all cases
-			const allLabels = document.querySelectorAll('label');
+			const allLabels = document.querySelectorAll("label");
 			for (const labelEl of allLabels) {
 				const labelText = labelEl.textContent.trim();
-				if (labelText.toLowerCase() === label.toLowerCase() || 
-				   labelText.toLowerCase().includes(label.toLowerCase())) {
-					
+				if (
+					labelText.toLowerCase() === label.toLowerCase() ||
+					labelText.toLowerCase().includes(label.toLowerCase())
+				) {
 					// Try to find element by 'for' attribute
-					if (labelEl.getAttribute('for')) {
-						const inputById = document.getElementById(labelEl.getAttribute('for'));
+					if (labelEl.getAttribute("for")) {
+						const inputById = document.getElementById(
+							labelEl.getAttribute("for"),
+						);
 						if (inputById) {
 							element = inputById;
-							console.log(`Found element by label 'for' attribute: ${element.id || element.name}`);
+							console.log(
+								`Found element by label 'for' attribute: ${element.id || element.name}`,
+							);
 							break;
 						}
 					}
-					
+
 					// Look for inputs inside the label
-					const inputsInLabel = labelEl.querySelectorAll('input, select, textarea');
+					const inputsInLabel = labelEl.querySelectorAll(
+						"input, select, textarea",
+					);
 					if (inputsInLabel.length > 0) {
 						element = inputsInLabel[0];
-						console.log(`Found input inside label: ${element.id || element.name || 'unnamed'}`);
+						console.log(
+							`Found input inside label: ${element.id || element.name || "unnamed"}`,
+						);
 						break;
 					}
-					
+
 					// Look for inputs near this label
 					const labelParent = labelEl.parentElement;
 					if (labelParent) {
-						const nearbyInputs = labelParent.querySelectorAll('input, select, textarea');
+						const nearbyInputs = labelParent.querySelectorAll(
+							"input, select, textarea",
+						);
 						if (nearbyInputs.length > 0) {
 							element = nearbyInputs[0];
-							console.log(`Found nearby input element: ${element.id || element.name || 'unnamed'}`);
+							console.log(
+								`Found nearby input element: ${element.id || element.name || "unnamed"}`,
+							);
 							break;
 						}
 					}
-					
+
 					// If zen mode, try more aggressive DOM traversal
 					if (useZenMode && !element) {
 						// Look for inputs in neighboring elements
 						const labelGrandparent = labelParent?.parentElement;
 						if (labelGrandparent) {
 							// Try siblings of the label's parent
-							Array.from(labelGrandparent.children).forEach(sibling => {
+							Array.from(labelGrandparent.children).forEach((sibling) => {
 								if (!element && sibling !== labelParent) {
-									const siblingInputs = sibling.querySelectorAll('input, select, textarea');
+									const siblingInputs = sibling.querySelectorAll(
+										"input, select, textarea",
+									);
 									if (siblingInputs.length > 0) {
 										element = siblingInputs[0];
-										console.log(`Found input in sibling container: ${element.id || element.name || 'unnamed'}`);
+										console.log(
+											`Found input in sibling container: ${element.id || element.name || "unnamed"}`,
+										);
 									}
 								}
 							});
-							
+
 							// If still no element, look at the grandparent's other children
 							if (!element) {
-								const allInputs = labelGrandparent.querySelectorAll('input, select, textarea');
+								const allInputs = labelGrandparent.querySelectorAll(
+									"input, select, textarea",
+								);
 								if (allInputs.length > 0) {
 									element = allInputs[0];
-									console.log(`Found input in grandparent container: ${element.id || element.name || 'unnamed'}`);
+									console.log(
+										`Found input in grandparent container: ${element.id || element.name || "unnamed"}`,
+									);
 								}
 							}
 						}
 					}
 				}
 			}
-			
+
 			// If still no element found and not in zen mode, try form-scoped approach
 			if (!element && !useZenMode) {
 				// Find all labels in the form
-				const labels = Array.from(form.querySelectorAll('label'));
-				
+				const labels = Array.from(form.querySelectorAll("label"));
+
 				// Find a label that matches or contains our target text
-				const matchingLabel = labels.find(labelEl => {
+				const matchingLabel = labels.find((labelEl) => {
 					const labelText = labelEl.textContent.trim();
-					return labelText.toLowerCase() === label.toLowerCase() || 
-						   labelText.toLowerCase().includes(label.toLowerCase());
+					return (
+						labelText.toLowerCase() === label.toLowerCase() ||
+						labelText.toLowerCase().includes(label.toLowerCase())
+					);
 				});
-				
-				if (matchingLabel && matchingLabel.getAttribute('for')) {
-					element = form.querySelector(`#${matchingLabel.getAttribute('for')}`);
-					console.log(`Found element by label: ${element ? (element.id || element.name) : 'not found'}`);
+
+				if (matchingLabel && matchingLabel.getAttribute("for")) {
+					element = form.querySelector(`#${matchingLabel.getAttribute("for")}`);
+					console.log(
+						`Found element by label: ${element ? element.id || element.name : "not found"}`,
+					);
 				}
-				
+
 				// If we still don't have an element, try finding inputs near this label
 				if (!element && matchingLabel) {
 					// Look for inputs that are siblings or children of the label's parent
 					const labelParent = matchingLabel.parentElement;
 					if (labelParent) {
-						const nearbyInputs = labelParent.querySelectorAll('input, select, textarea');
+						const nearbyInputs = labelParent.querySelectorAll(
+							"input, select, textarea",
+						);
 						if (nearbyInputs.length > 0) {
 							element = nearbyInputs[0];
-							console.log(`Found nearby input element: ${element.id || element.name || 'unnamed'}`);
+							console.log(
+								`Found nearby input element: ${element.id || element.name || "unnamed"}`,
+							);
 						}
 					}
-					
+
 					// Try looking for inputs inside the label itself
 					if (!element) {
-						const inputsInLabel = matchingLabel.querySelectorAll('input, select, textarea');
+						const inputsInLabel = matchingLabel.querySelectorAll(
+							"input, select, textarea",
+						);
 						if (inputsInLabel.length > 0) {
 							element = inputsInLabel[0];
-							console.log(`Found input inside label: ${element.id || element.name || 'unnamed'}`);
+							console.log(
+								`Found input inside label: ${element.id || element.name || "unnamed"}`,
+							);
 						}
 					}
 				}
@@ -396,10 +438,11 @@ export function fillFormWithMappings(form, mappings) {
 		// If we still can't find it, try a more generic approach by input type and position
 		if (!element && type) {
 			console.log(`Trying to find element by type: "${type}"`);
-			const typeSelector = type === "hidden" ? 
-				`input[type="${type}"]` : 
-				`input[type="${type}"]:not([type="hidden"]), ${type}`;
-				
+			const typeSelector =
+				type === "hidden"
+					? `input[type="${type}"]`
+					: `input[type="${type}"]:not([type="hidden"]), ${type}`;
+
 			const elements = Array.from(form.querySelectorAll(typeSelector));
 			if (elements.length > 0) {
 				// If we have a label, try to find an element that's near text containing the label
@@ -409,8 +452,8 @@ export function fillFormWithMappings(form, mappings) {
 					let textNode;
 					let bestElement = null;
 					let shortestDistance = Infinity;
-					
-					while (textNode = walker.nextNode()) {
+
+					while ((textNode = walker.nextNode())) {
 						const text = textNode.textContent.trim();
 						if (text.toLowerCase().includes(label.toLowerCase())) {
 							// Found text matching our label, now find closest input
@@ -418,8 +461,10 @@ export function fillFormWithMappings(form, mappings) {
 								// Calculate a simple "distance" between the text node and this element
 								const textRect = textNode.parentElement.getBoundingClientRect();
 								const elRect = el.getBoundingClientRect();
-								const distance = Math.abs(textRect.top - elRect.top) + Math.abs(textRect.left - elRect.left);
-								
+								const distance =
+									Math.abs(textRect.top - elRect.top) +
+									Math.abs(textRect.left - elRect.left);
+
 								if (distance < shortestDistance) {
 									shortestDistance = distance;
 									bestElement = el;
@@ -427,37 +472,47 @@ export function fillFormWithMappings(form, mappings) {
 							}
 						}
 					}
-					
+
 					if (bestElement) {
 						element = bestElement;
-						console.log(`Found element by proximity to label text: ${element.id || element.name || 'unnamed'}`);
+						console.log(
+							`Found element by proximity to label text: ${element.id || element.name || "unnamed"}`,
+						);
 					}
 				}
-				
+
 				// If we still don't have an element, just take the first one
 				if (!element) {
 					element = elements[0];
-					console.log(`Using first ${type} element found: ${element.id || element.name || 'unnamed'}`);
+					console.log(
+						`Using first ${type} element found: ${element.id || element.name || "unnamed"}`,
+					);
 				}
 			}
 		}
 
 		// If we still don't have an element, try to find by similar property (like a name containing the ID)
 		if (!element && htmlElementId) {
-			const inputs = form.querySelectorAll('input, select, textarea');
+			const inputs = form.querySelectorAll("input, select, textarea");
 			// Look for inputs with ID or name containing our target ID
 			for (const input of inputs) {
-				if ((input.id && input.id.includes(htmlElementId)) || 
-					(input.name && input.name.includes(htmlElementId))) {
+				if (
+					(input.id && input.id.includes(htmlElementId)) ||
+					(input.name && input.name.includes(htmlElementId))
+				) {
 					element = input;
-					console.log(`Found element by partial ID/name match: ${input.id || input.name}`);
+					console.log(
+						`Found element by partial ID/name match: ${input.id || input.name}`,
+					);
 					break;
 				}
 			}
 		}
 
 		if (!element) {
-			console.warn(`Element with ID="${htmlElementId}", label="${label}" not found in form`);
+			console.warn(
+				`Element with ID="${htmlElementId}", label="${label}" not found in form`,
+			);
 			return;
 		}
 
@@ -466,9 +521,13 @@ export function fillFormWithMappings(form, mappings) {
 		const filled = fillElement(element, value);
 		if (filled) {
 			filledFields.push(element);
-			console.log(`Successfully filled element: ${element.id || element.name || 'unnamed'}`);
+			console.log(
+				`Successfully filled element: ${element.id || element.name || "unnamed"}`,
+			);
 		} else {
-			console.warn(`Failed to fill element: ${element.id || element.name || 'unnamed'}`);
+			console.warn(
+				`Failed to fill element: ${element.id || element.name || "unnamed"}`,
+			);
 		}
 	});
 
@@ -497,12 +556,12 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 	const inputMap = new Map();
 	const labelMap = new Map();
 	const typeMap = new Map();
-	
+
 	// biome-ignore lint/complexity/noForEach: <explanation>
 	originalInputs.forEach((input) => {
 		if (input.id) inputMap.set(input.id, input);
 		if (input.name) inputMap.set(input.name, input);
-		
+
 		// Also map by associated label text
 		if (input.id) {
 			const label = document.querySelector(`label[for="${input.id}"]`);
@@ -511,7 +570,7 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 				labelMap.set(labelText, input);
 			}
 		}
-		
+
 		// Group by input type
 		const type = input.type || input.tagName.toLowerCase();
 		if (!typeMap.has(type)) {
@@ -528,71 +587,94 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 	// biome-ignore lint/complexity/noForEach: <explanation>
 	mappings.forEach((mapping) => {
 		const { htmlElementId, value, label, type } = mapping;
-		console.log(`Attempting to fill virtual element: ID=${htmlElementId}, Label=${label}, Type=${type}, Value=${value}`);
-		
+		console.log(
+			`Attempting to fill virtual element: ID=${htmlElementId}, Label=${label}, Type=${type}, Value=${value}`,
+		);
+
 		// Try to find element by ID or name
 		let element = htmlElementId ? inputMap.get(htmlElementId) : null;
-		
+
 		// Try to find by label if ID/name fails
 		if (!element && label) {
 			const labelLower = label.toLowerCase();
-			
+
 			// Check exact label match
 			if (labelMap.has(labelLower)) {
 				element = labelMap.get(labelLower);
-				console.log(`Found element by exact label match: ${element.id || element.name}`);
+				console.log(
+					`Found element by exact label match: ${element.id || element.name}`,
+				);
 			} else {
 				// Check for partial label match
 				for (const [labelText, input] of labelMap.entries()) {
-					if (labelText.includes(labelLower) || labelLower.includes(labelText)) {
+					if (
+						labelText.includes(labelLower) ||
+						labelLower.includes(labelText)
+					) {
 						element = input;
-						console.log(`Found element by partial label match: ${element.id || element.name}`);
+						console.log(
+							`Found element by partial label match: ${element.id || element.name}`,
+						);
 						break;
 					}
 				}
 			}
-			
+
 			// If still no match, try to find any label in the DOM that matches
 			if (!element) {
 				console.log("Trying to find element by directly searching DOM labels");
-				const allLabels = document.querySelectorAll('label');
+				const allLabels = document.querySelectorAll("label");
 				for (const domLabel of allLabels) {
 					const labelText = domLabel.textContent.trim().toLowerCase();
-					if (labelText === labelLower || labelText.includes(labelLower) || labelLower.includes(labelText)) {
+					if (
+						labelText === labelLower ||
+						labelText.includes(labelLower) ||
+						labelLower.includes(labelText)
+					) {
 						// Found a matching label, now get the associated input
-						if (domLabel.getAttribute('for')) {
-							const inputId = domLabel.getAttribute('for');
+						if (domLabel.getAttribute("for")) {
+							const inputId = domLabel.getAttribute("for");
 							const input = document.getElementById(inputId);
 							if (input) {
 								// For zen-process, we don't check if the input is in originalInputs
 								element = input;
-								console.log(`Found element via DOM label search: ${element.id || element.name}`);
+								console.log(
+									`Found element via DOM label search: ${element.id || element.name}`,
+								);
 								break;
 							}
 						}
-						
+
 						// Check for inputs inside the label
-						const inputsInLabel = domLabel.querySelectorAll('input, select, textarea');
+						const inputsInLabel = domLabel.querySelectorAll(
+							"input, select, textarea",
+						);
 						if (inputsInLabel.length > 0) {
 							// Take the first input in label
 							element = inputsInLabel[0];
-							console.log(`Found element inside label: ${element.id || element.name || 'unnamed'}`);
+							console.log(
+								`Found element inside label: ${element.id || element.name || "unnamed"}`,
+							);
 							break;
 						}
-						
+
 						// Check for inputs near the label
 						if (!element) {
 							const parent = domLabel.parentElement;
 							if (parent) {
-								const nearbyInputs = parent.querySelectorAll('input, select, textarea');
+								const nearbyInputs = parent.querySelectorAll(
+									"input, select, textarea",
+								);
 								if (nearbyInputs.length > 0) {
 									element = nearbyInputs[0];
-									console.log(`Found element near label: ${element.id || element.name || 'unnamed'}`);
+									console.log(
+										`Found element near label: ${element.id || element.name || "unnamed"}`,
+									);
 									break;
 								}
 							}
 						}
-						
+
 						// If still no element, look at siblings of parent
 						if (!element) {
 							const parent = domLabel.parentElement;
@@ -600,10 +682,14 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 								const siblings = parent.parentElement.children;
 								for (const sibling of siblings) {
 									if (sibling !== parent) {
-										const inputs = sibling.querySelectorAll('input, select, textarea');
+										const inputs = sibling.querySelectorAll(
+											"input, select, textarea",
+										);
 										if (inputs.length > 0) {
 											element = inputs[0];
-											console.log(`Found element in sibling element: ${element.id || element.name || 'unnamed'}`);
+											console.log(
+												`Found element in sibling element: ${element.id || element.name || "unnamed"}`,
+											);
 											break;
 										}
 									}
@@ -612,16 +698,18 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 						}
 					}
 				}
-				
+
 				// If we found an element outside the original inputs, make sure it's valid to use
 				if (element && !originalInputs.includes(element)) {
 					// Add this element to our tracked elements
-					console.log(`Element found outside original inputs: ${element.id || element.name || 'unnamed'}`);
+					console.log(
+						`Element found outside original inputs: ${element.id || element.name || "unnamed"}`,
+					);
 					originalInputs.push(element);
 				}
 			}
 		}
-		
+
 		// Try to find by type and value for radio buttons
 		if (!element && type === "radio" && value) {
 			console.log(`Trying to find radio button with value: "${value}"`);
@@ -634,7 +722,7 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 				}
 			}
 		}
-		
+
 		// Try to find by type only as a fallback
 		if (!element && type && typeMap.has(type)) {
 			const typeInputs = typeMap.get(type);
@@ -644,46 +732,60 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 					// Find the input closest to text that matches our label
 					for (const input of typeInputs) {
 						const inputRect = input.getBoundingClientRect();
-						
+
 						// Look for text containing our label near this input
 						let found = false;
-						const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+						const walker = document.createTreeWalker(
+							document.body,
+							NodeFilter.SHOW_TEXT,
+						);
 						let textNode;
-						
-						while (textNode = walker.nextNode()) {
+
+						while ((textNode = walker.nextNode())) {
 							const text = textNode.textContent.trim();
 							if (text.toLowerCase().includes(label.toLowerCase())) {
 								const textRect = textNode.parentElement.getBoundingClientRect();
 								// Check if within reasonable distance
-								const distance = Math.abs(textRect.top - inputRect.top) + Math.abs(textRect.left - inputRect.left);
-								if (distance < 200) { // arbitrary threshold
+								const distance =
+									Math.abs(textRect.top - inputRect.top) +
+									Math.abs(textRect.left - inputRect.left);
+								if (distance < 200) {
+									// arbitrary threshold
 									element = input;
-									console.log(`Found element by type and proximity to label: ${input.id || input.name}`);
+									console.log(
+										`Found element by type and proximity to label: ${input.id || input.name}`,
+									);
 									found = true;
 									break;
 								}
 							}
 						}
-						
+
 						if (found) break;
 					}
 				}
-				
+
 				// If we still don't have an element, just take the first one of this type
 				if (!element) {
 					element = typeInputs[0];
-					console.log(`Using first ${type} element found: ${element.id || element.name || 'unnamed'}`);
+					console.log(
+						`Using first ${type} element found: ${element.id || element.name || "unnamed"}`,
+					);
 				}
 			}
 		}
-		
+
 		// If we still can't find it, try partial ID matching
 		if (!element && htmlElementId) {
 			for (const input of originalInputs) {
-				if ((input.id && input.id.includes(htmlElementId)) || 
-				    (input.name && input.name.includes(htmlElementId))) {
+				if (
+					(input.id && input.id.includes(htmlElementId)) ||
+					(input.name && input.name.includes(htmlElementId))
+				) {
 					element = input;
-					console.log(`Found element by partial ID/name match: ${input.id || input.name}`);
+					console.log(
+						`Found element by partial ID/name match: ${input.id || input.name}`,
+					);
 					break;
 				}
 			}
@@ -701,9 +803,13 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 		const filled = fillElement(element, value);
 		if (filled) {
 			filledFields.push(element);
-			console.log(`Successfully filled virtual element: ${element.id || element.name || 'unnamed'}`);
+			console.log(
+				`Successfully filled virtual element: ${element.id || element.name || "unnamed"}`,
+			);
 		} else {
-			console.warn(`Failed to fill virtual element: ${element.id || element.name || 'unnamed'}`);
+			console.warn(
+				`Failed to fill virtual element: ${element.id || element.name || "unnamed"}`,
+			);
 		}
 	});
 
@@ -724,34 +830,37 @@ export function fillElement(element, value) {
 
 	try {
 		console.log(`Filling ${tagName} (type=${type}) with value: "${value}"`);
-		
+
 		// Special handling for custom selects (e.g., gender dropdown)
 		if (tagName === "div" && element.id && element.id.startsWith("Select")) {
 			// Find the hidden input to set its value
 			const hiddenInput = element.querySelector('input[type="hidden"]');
 			if (hiddenInput) {
 				hiddenInput.value = value;
-				
+
 				// Find and update the visible selection text
-				const displayElement = element.querySelector('.sc-deXhhX') || 
-									  element.querySelector('[class*="select"]') || 
-									  element.querySelector('[class*="dropdown"]');
-                                      
+				const displayElement =
+					element.querySelector(".sc-deXhhX") ||
+					element.querySelector('[class*="select"]') ||
+					element.querySelector('[class*="dropdown"]');
+
 				if (displayElement) {
 					displayElement.textContent = value;
 				}
-				
+
 				// Find all options and mark the selected one
-				const options = element.querySelectorAll('.sc-epALIP') || 
-							   element.querySelectorAll('[class*="option"]') || 
-							   element.querySelectorAll('li');
-                               
+				const options =
+					element.querySelectorAll('[class*="option"]') ||
+					element.querySelectorAll("li");
+
 				let optionFound = false;
 				for (const option of options) {
 					const optionText = option.textContent.trim();
-					if (optionText.toLowerCase() === value.toLowerCase() || 
-					    optionText.toLowerCase().includes(value.toLowerCase()) || 
-					    value.toLowerCase().includes(optionText.toLowerCase())) {
+					if (
+						optionText.toLowerCase() === value.toLowerCase() ||
+						optionText.toLowerCase().includes(value.toLowerCase()) ||
+						value.toLowerCase().includes(optionText.toLowerCase())
+					) {
 						// Simulate selection event
 						try {
 							option.click();
@@ -763,25 +872,25 @@ export function fillElement(element, value) {
 						}
 					}
 				}
-				
+
 				// If we couldn't find an option to click, at least set the value
 				if (!optionFound) {
 					console.log(`No matching option found, setting value directly`);
 				}
-				
+
 				// Mark the field as filled and highlight it
 				highlightFilledField(hiddenInput);
 				highlightFilledField(element);
-				
+
 				// Dispatch events
 				if (hiddenInput) {
 					triggerEvents(hiddenInput);
 				}
-				
+
 				return true;
 			}
 			return false;
-		} 
+		}
 		// Standard handling for regular elements
 		else if (tagName === "select") {
 			fillSelectElement(element, value);
@@ -790,9 +899,16 @@ export function fillElement(element, value) {
 		} else if (
 			tagName === "textarea" ||
 			(tagName === "input" &&
-				["text", "email", "number", "tel", "url", "password", "date", "hidden"].includes(
-					type,
-				))
+				[
+					"text",
+					"email",
+					"number",
+					"tel",
+					"url",
+					"password",
+					"date",
+					"hidden",
+				].includes(type))
 		) {
 			fillInputElement(element, value);
 		} else {
@@ -801,7 +917,7 @@ export function fillElement(element, value) {
 				// Handle contenteditable elements
 				element.textContent = value;
 				console.log(`Filled contenteditable element`);
-			} else if (typeof element.value !== 'undefined') {
+			} else if (typeof element.value !== "undefined") {
 				// Handle any element with a value property
 				element.value = value;
 				console.log(`Set value directly on element`);
@@ -831,21 +947,28 @@ export function fillElement(element, value) {
  * @param {string} value - The value to select
  */
 function fillSelectElement(element, value) {
-	console.log(`Filling select element ${element.id || element.name} with value "${value}"`);
-	console.log(`Available options:`, Array.from(element.options).map(opt => 
-		`${opt.value}: ${opt.textContent.trim()}`
-	));
+	console.log(
+		`Filling select element ${element.id || element.name} with value "${value}"`,
+	);
+	console.log(
+		`Available options:`,
+		Array.from(element.options).map(
+			(opt) => `${opt.value}: ${opt.textContent.trim()}`,
+		),
+	);
 
 	// Check each option - first try exact match
 	let matched = false;
-	
+
 	for (const option of element.options) {
 		const optionText = option.textContent.trim();
 		const optionValue = option.value;
-		
+
 		// Check for exact matches (case insensitive)
-		if (optionValue.toLowerCase() === value.toLowerCase() || 
-		    optionText.toLowerCase() === value.toLowerCase()) {
+		if (
+			optionValue.toLowerCase() === value.toLowerCase() ||
+			optionText.toLowerCase() === value.toLowerCase()
+		) {
 			element.value = optionValue;
 			matched = true;
 			console.log(`Exact match found: "${optionText}" (${optionValue})`);
@@ -859,9 +982,11 @@ function fillSelectElement(element, value) {
 		for (const option of element.options) {
 			const optionText = option.textContent.trim();
 			const optionValue = option.value;
-			
-			if (optionText.toLowerCase().includes(value.toLowerCase()) || 
-			    value.toLowerCase().includes(optionText.toLowerCase())) {
+
+			if (
+				optionText.toLowerCase().includes(value.toLowerCase()) ||
+				value.toLowerCase().includes(optionText.toLowerCase())
+			) {
 				element.value = optionValue;
 				matched = true;
 				console.log(`Partial match found: "${optionText}" (${optionValue})`);
@@ -869,25 +994,30 @@ function fillSelectElement(element, value) {
 			}
 		}
 	}
-	
+
 	// Check if this is a select with a value that might be capitalized or formatted differently
-	if (!matched && typeof value === 'string') {
+	if (!matched && typeof value === "string") {
 		const valueLower = value.toLowerCase();
-		
+
 		// Try with a normalized version of the value (lowercase, no special chars)
-		const normalizeText = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+		const normalizeText = (text) =>
+			text.toLowerCase().replace(/[^a-z0-9]/g, "");
 		const normalizedValue = normalizeText(value);
-		
+
 		for (const option of element.options) {
 			const optionText = option.textContent.trim();
 			const normalizedOption = normalizeText(optionText);
-			
-			if (normalizedOption === normalizedValue || 
-			    normalizedOption.includes(normalizedValue) || 
-			    normalizedValue.includes(normalizedOption)) {
+
+			if (
+				normalizedOption === normalizedValue ||
+				normalizedOption.includes(normalizedValue) ||
+				normalizedValue.includes(normalizedOption)
+			) {
 				element.value = option.value;
 				matched = true;
-				console.log(`Normalized match found: "${optionText}" (${option.value})`);
+				console.log(
+					`Normalized match found: "${optionText}" (${option.value})`,
+				);
 				break;
 			}
 		}
@@ -907,20 +1037,39 @@ function fillSelectElement(element, value) {
  * @param {string|boolean} value - The value to set
  */
 function fillCheckboxOrRadio(element, value) {
-	console.log(`Filling ${element.type} element ${element.id || element.name} with value "${value}"`);
-	
+	console.log(
+		`Filling ${element.type} element ${element.id || element.name} with value "${value}"`,
+	);
+
 	if (element.type === "checkbox") {
 		// For checkboxes, we use true/false
 		const positiveValues = [
-			true, "true", "1", "yes", "sim", "verdadeiro", "checked", "selected", "on"
+			true,
+			"true",
+			"1",
+			"yes",
+			"sim",
+			"verdadeiro",
+			"checked",
+			"selected",
+			"on",
 		];
 		const negativeValues = [
-			false, "false", "0", "no", "não", "nao", "falso", "unchecked", "unselected", "off"
+			false,
+			"false",
+			"0",
+			"no",
+			"não",
+			"nao",
+			"falso",
+			"unchecked",
+			"unselected",
+			"off",
 		];
-		
+
 		// Convert to lowercase for string comparison
 		const valueLower = typeof value === "string" ? value.toLowerCase() : value;
-		
+
 		if (positiveValues.includes(valueLower)) {
 			element.checked = true;
 			console.log(`Checkbox ${element.id || element.name} checked`);
@@ -931,23 +1080,42 @@ function fillCheckboxOrRadio(element, value) {
 			// If it's not a clear true/false value, try to infer from context
 			const label = getAssociatedLabel(element);
 			const labelText = label ? label.textContent.trim().toLowerCase() : "";
-			
+
 			if (labelText && typeof value === "string") {
 				// If the value contains or is similar to the label text, check it
-				if (value.toLowerCase().includes(labelText) || 
-				    labelText.includes(value.toLowerCase())) {
+				if (
+					value.toLowerCase().includes(labelText) ||
+					labelText.includes(value.toLowerCase())
+				) {
 					element.checked = true;
-					console.log(`Checkbox ${element.id || element.name} checked based on label similarity`);
+					console.log(
+						`Checkbox ${element.id || element.name} checked based on label similarity`,
+					);
 				} else {
 					// Default to checked for agreement checkboxes (terms, privacy policy, etc.)
-					const agreementTerms = ["agree", "accept", "consent", "terms", "policy", "privacy", 
-					                       "newsletter", "email", "subscri", "offers", "news"];
-					                      
-					if (agreementTerms.some(term => labelText.includes(term))) {
+					const agreementTerms = [
+						"agree",
+						"accept",
+						"consent",
+						"terms",
+						"policy",
+						"privacy",
+						"newsletter",
+						"email",
+						"subscri",
+						"offers",
+						"news",
+					];
+
+					if (agreementTerms.some((term) => labelText.includes(term))) {
 						element.checked = true;
-						console.log(`Checkbox ${element.id || element.name} checked as agreement checkbox`);
+						console.log(
+							`Checkbox ${element.id || element.name} checked as agreement checkbox`,
+						);
 					} else {
-						console.warn(`Could not determine checkbox value, defaulting to unchecked`);
+						console.warn(
+							`Could not determine checkbox value, defaulting to unchecked`,
+						);
 					}
 				}
 			} else {
@@ -958,90 +1126,115 @@ function fillCheckboxOrRadio(element, value) {
 		// For radio buttons, we need to be more flexible
 		const shouldCheck = (() => {
 			// Simple boolean values
-			if (value === true || value === "true" || value === "1" || 
-			    (typeof value === "string" && value.toLowerCase() === "yes")) {
+			if (
+				value === true ||
+				value === "true" ||
+				value === "1" ||
+				(typeof value === "string" && value.toLowerCase() === "yes")
+			) {
 				return true;
 			}
-			
+
 			// Special case handling for numbered values (common in forms)
 			if (element.value && value && element.value === value.toString()) {
 				return true;
 			}
-			
+
 			// Special case handling for PF/PJ (Pessoa Física / Pessoa Jurídica) in Brazil
-			if (element.value === "1" && (
-				typeof value === "string" && (
-					value.toLowerCase().includes("física") || 
-					value.toLowerCase().includes("fisica") || 
-					value.toLowerCase() === "pf"
-				))) {
+			if (
+				element.value === "1" &&
+				typeof value === "string" &&
+				(value.toLowerCase().includes("física") ||
+					value.toLowerCase().includes("fisica") ||
+					value.toLowerCase() === "pf")
+			) {
 				return true;
 			}
-			
-			if (element.value === "2" && (
-				typeof value === "string" && (
-					value.toLowerCase().includes("jurídica") || 
-					value.toLowerCase().includes("juridica") || 
-					value.toLowerCase() === "pj"
-				))) {
+
+			if (
+				element.value === "2" &&
+				typeof value === "string" &&
+				(value.toLowerCase().includes("jurídica") ||
+					value.toLowerCase().includes("juridica") ||
+					value.toLowerCase() === "pj")
+			) {
 				return true;
 			}
-			
+
 			// Check if value directly matches this radio button's value
 			if (element.value === value) {
 				return true;
 			}
-			
+
 			// Check radio button's label for matches
 			const label = getAssociatedLabel(element);
 			if (label && typeof value === "string") {
 				const labelText = label.textContent.trim().toLowerCase();
 				const valueLower = value.toLowerCase();
-				
+
 				// Check for exact or partial matches between label and value
-				if (labelText === valueLower || 
-				    labelText.includes(valueLower) || 
-				    valueLower.includes(labelText)) {
+				if (
+					labelText === valueLower ||
+					labelText.includes(valueLower) ||
+					valueLower.includes(labelText)
+				) {
 					return true;
 				}
-				
+
 				// For gender radio buttons
-				if ((labelText.includes("male") || labelText.includes("homem") || labelText === "m") && 
-				    (valueLower === "male" || valueLower === "homem" || valueLower === "m")) {
+				if (
+					(labelText.includes("male") ||
+						labelText.includes("homem") ||
+						labelText === "m") &&
+					(valueLower === "male" ||
+						valueLower === "homem" ||
+						valueLower === "m")
+				) {
 					return true;
 				}
-				
-				if ((labelText.includes("female") || labelText.includes("mulher") || labelText === "f") && 
-				    (valueLower === "female" || valueLower === "mulher" || valueLower === "f")) {
+
+				if (
+					(labelText.includes("female") ||
+						labelText.includes("mulher") ||
+						labelText === "f") &&
+					(valueLower === "female" ||
+						valueLower === "mulher" ||
+						valueLower === "f")
+				) {
 					return true;
 				}
 			}
-			
+
 			// Check if this radio is part of a group and its numerical value matches
 			if (element.name && document.getElementsByName(element.name).length > 1) {
 				// This radio is part of a group
 				const allRadios = document.getElementsByName(element.name);
 				const position = Array.from(allRadios).indexOf(element);
-				
+
 				// If value is a number and matches this radio's position (+1)
 				if (typeof value === "number" && value === position + 1) {
 					return true;
 				}
-				
+
 				// If value is a string number and matches this radio's position (+1)
-				if (typeof value === "string" && !isNaN(parseInt(value)) && 
-				    parseInt(value) === position + 1) {
+				if (
+					typeof value === "string" &&
+					!isNaN(parseInt(value)) &&
+					parseInt(value) === position + 1
+				) {
 					return true;
 				}
 			}
-			
+
 			return false;
 		})();
-		
+
 		if (shouldCheck) {
 			element.checked = true;
-			console.log(`Radio button ${element.id || element.name} (${element.value}) checked`);
-			
+			console.log(
+				`Radio button ${element.id || element.name} (${element.value}) checked`,
+			);
+
 			// Dispatch events to ensure any change handlers are triggered
 			triggerEvents(element);
 		}
@@ -1057,38 +1250,38 @@ function fillCheckboxOrRadio(element, value) {
 function fillInputElement(element, value) {
 	// For date inputs, ensure the value is formatted correctly
 	let valueToInsert = value;
-	
+
 	if (element.type === "date" && value) {
 		try {
 			let date;
 			// Handle different date formats
-			
+
 			// Check if it's a Brazilian format (DD/MM/YYYY)
 			if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-				const [day, month, year] = value.split('/');
+				const [day, month, year] = value.split("/");
 				date = new Date(`${year}-${month}-${day}`);
-			} 
+			}
 			// Check if it's a date with slashes (MM/DD/YYYY) - US format
 			else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
 				date = new Date(value);
-			} 
+			}
 			// Try with direct parsing (YYYY-MM-DD or other formats)
 			else {
 				date = new Date(value);
 			}
-			
+
 			// Check if date is valid
 			if (isNaN(date.getTime())) {
-				throw new Error('Invalid date');
+				throw new Error("Invalid date");
 			}
-			
+
 			valueToInsert = date.toISOString().split("T")[0];
 		} catch (e) {
 			console.warn(`Invalid date value: ${value}`, e);
 			// Use the value directly if we couldn't parse it
 			valueToInsert = value;
 		}
-	} else if (element.getAttribute('maskplaceholder') === 'dd/mm/yyyy') {
+	} else if (element.getAttribute("maskplaceholder") === "dd/mm/yyyy") {
 		// Handle masked date inputs (usually in Brazilian format)
 		try {
 			let date;
@@ -1098,18 +1291,18 @@ function fillInputElement(element, value) {
 				valueToInsert = value;
 			} else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
 				// ISO format YYYY-MM-DD
-				const [year, month, day] = value.split('-');
+				const [year, month, day] = value.split("-");
 				valueToInsert = `${day}/${month}/${year}`;
 			} else {
 				// Try to parse and reformat
 				date = new Date(value);
 				if (!isNaN(date.getTime())) {
-					const day = String(date.getDate()).padStart(2, '0');
-					const month = String(date.getMonth() + 1).padStart(2, '0');
+					const day = String(date.getDate()).padStart(2, "0");
+					const month = String(date.getMonth() + 1).padStart(2, "0");
 					const year = date.getFullYear();
 					valueToInsert = `${day}/${month}/${year}`;
 				} else {
-					throw new Error('Invalid date');
+					throw new Error("Invalid date");
 				}
 			}
 		} catch (e) {
@@ -1122,31 +1315,37 @@ function fillInputElement(element, value) {
 	try {
 		// Clear existing value
 		element.value = "";
-		
+
 		// Focus on the input to activate any listeners
 		element.focus();
-		
+
 		// Add debug logs
-		console.log(`Filling element ${element.id || element.name || 'unnamed'} with value: "${valueToInsert}"`);
-		
+		console.log(
+			`Filling element ${element.id || element.name || "unnamed"} with value: "${valueToInsert}"`,
+		);
+
 		// Try simulating typing with small delays between keystrokes
 		simulateTypingWithDelays(element, valueToInsert)
 			.then(() => {
-				console.log(`Completed typing simulation for ${element.id || element.name || 'unnamed'}`);
-				
+				console.log(
+					`Completed typing simulation for ${element.id || element.name || "unnamed"}`,
+				);
+
 				// Dispatch final blur event to trigger validation
-				const blurEvent = new Event('blur', { bubbles: true });
+				const blurEvent = new Event("blur", { bubbles: true });
 				element.dispatchEvent(blurEvent);
-				
+
 				// Double-check if value was set correctly
 				if (element.value.length < valueToInsert.length) {
-					console.warn(`Typing simulation incomplete for ${element.id || element.name}: Expected "${valueToInsert}", got "${element.value}"`);
+					console.warn(
+						`Typing simulation incomplete for ${element.id || element.name}: Expected "${valueToInsert}", got "${element.value}"`,
+					);
 					// Fallback to direct setting if typing simulation didn't complete properly
 					element.value = valueToInsert;
 					triggerFullEventSequence(element);
 				}
 			})
-			.catch(error => {
+			.catch((error) => {
 				console.error(`Error during typing simulation: ${error}`);
 				// Fallback to direct setting
 				element.value = valueToInsert;
@@ -1156,10 +1355,10 @@ function fillInputElement(element, value) {
 		console.error(`Error filling input: ${error}`);
 		// Fallback to direct setting
 		element.value = valueToInsert;
-		
+
 		// Trigger events manually
-		const inputEvent = new Event('input', { bubbles: true });
-		const changeEvent = new Event('change', { bubbles: true });
+		const inputEvent = new Event("input", { bubbles: true });
+		const changeEvent = new Event("change", { bubbles: true });
 		element.dispatchEvent(inputEvent);
 		element.dispatchEvent(changeEvent);
 	}
@@ -1167,7 +1366,7 @@ function fillInputElement(element, value) {
 
 /**
  * Simulates typing with small delays between keystrokes
- * 
+ *
  * @param {HTMLElement} element - The element to type into
  * @param {string} text - The text to type
  * @returns {Promise} - Promise that resolves when typing is complete
@@ -1175,27 +1374,27 @@ function fillInputElement(element, value) {
 function simulateTypingWithDelays(element, text) {
 	return new Promise((resolve, reject) => {
 		let i = 0;
-		
+
 		function typeNextChar() {
 			if (i >= text.length) {
 				resolve();
 				return;
 			}
-			
+
 			const char = text[i];
-			
+
 			// Add character to value
 			const currentValue = element.value;
 			element.value = currentValue + char;
-			
+
 			// Trigger key events
 			triggerKeyEvents(element, char);
-			
+
 			// Move to next character after a small delay
 			i++;
 			setTimeout(typeNextChar, 10); // 10ms delay between keystrokes
 		}
-		
+
 		// Start typing
 		typeNextChar();
 	});
@@ -1203,27 +1402,27 @@ function simulateTypingWithDelays(element, text) {
 
 /**
  * Triggers all key-related events for a character
- * 
+ *
  * @param {HTMLElement} element - The element to trigger events on
  * @param {string} char - The character being typed
  */
 function triggerKeyEvents(element, char) {
 	// Get appropriate key code
 	let keyCode = char.charCodeAt(0);
-	
+
 	// For special characters, map to correct code
 	const specialKeys = {
-		' ': 'Space',
-		'.': 'Period',
-		',': 'Comma',
-		'/': 'Slash',
-		'\\': 'Backslash',
-		'-': 'Minus',
-		'+': 'Plus',
-		'=': 'Equal',
-		'@': 'At'
+		" ": "Space",
+		".": "Period",
+		",": "Comma",
+		"/": "Slash",
+		"\\": "Backslash",
+		"-": "Minus",
+		"+": "Plus",
+		"=": "Equal",
+		"@": "At",
 	};
-	
+
 	let code;
 	if (specialKeys[char]) {
 		code = specialKeys[char];
@@ -1234,7 +1433,7 @@ function triggerKeyEvents(element, char) {
 	} else {
 		code = `Key${char}`;
 	}
-	
+
 	// Create common event options
 	const eventOptions = {
 		key: char,
@@ -1244,53 +1443,53 @@ function triggerKeyEvents(element, char) {
 		which: keyCode,
 		bubbles: true,
 		cancelable: true,
-		view: window
+		view: window,
 	};
-	
+
 	// Create and dispatch keydown event
-	const keydownEvent = new KeyboardEvent('keydown', eventOptions);
+	const keydownEvent = new KeyboardEvent("keydown", eventOptions);
 	element.dispatchEvent(keydownEvent);
-	
+
 	// Create and dispatch keypress event
-	const keypressEvent = new KeyboardEvent('keypress', eventOptions);
+	const keypressEvent = new KeyboardEvent("keypress", eventOptions);
 	element.dispatchEvent(keypressEvent);
-	
+
 	// Create and dispatch input event
 	try {
-		const inputEvent = new InputEvent('input', {
+		const inputEvent = new InputEvent("input", {
 			bubbles: true,
 			cancelable: true,
-			inputType: 'insertText',
-			data: char
+			inputType: "insertText",
+			data: char,
 		});
 		element.dispatchEvent(inputEvent);
 	} catch (e) {
 		// Fallback for browsers that don't support InputEvent constructor
-		const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+		const inputEvent = new Event("input", { bubbles: true, cancelable: true });
 		element.dispatchEvent(inputEvent);
 	}
-	
+
 	// Create and dispatch keyup event
-	const keyupEvent = new KeyboardEvent('keyup', eventOptions);
+	const keyupEvent = new KeyboardEvent("keyup", eventOptions);
 	element.dispatchEvent(keyupEvent);
 }
 
 /**
  * Triggers a full sequence of events on an element
- * 
+ *
  * @param {HTMLElement} element - The element to trigger events on
  */
 function triggerFullEventSequence(element) {
 	// Focus
 	element.focus();
-	element.dispatchEvent(new Event('focus', { bubbles: true }));
-	
+	element.dispatchEvent(new Event("focus", { bubbles: true }));
+
 	// Input and change
-	element.dispatchEvent(new Event('input', { bubbles: true }));
-	element.dispatchEvent(new Event('change', { bubbles: true }));
-	
+	element.dispatchEvent(new Event("input", { bubbles: true }));
+	element.dispatchEvent(new Event("change", { bubbles: true }));
+
 	// Blur
-	element.dispatchEvent(new Event('blur', { bubbles: true }));
+	element.dispatchEvent(new Event("blur", { bubbles: true }));
 }
 
 /**
@@ -1311,11 +1510,15 @@ function highlightFilledField(element) {
 function triggerEvents(element) {
 	// Only dispatch events for non-text inputs (select, checkbox, radio)
 	// For text inputs, events are dispatched during character-by-character input simulation
-	if (element.type === "checkbox" || element.type === "radio" || element.tagName.toLowerCase() === "select") {
+	if (
+		element.type === "checkbox" ||
+		element.type === "radio" ||
+		element.tagName.toLowerCase() === "select"
+	) {
 		// Create and dispatch events
 		const inputEvent = new Event("input", { bubbles: true });
 		const changeEvent = new Event("change", { bubbles: true });
-	
+
 		element.dispatchEvent(inputEvent);
 		element.dispatchEvent(changeEvent);
 	}
@@ -1331,8 +1534,10 @@ export function collectFormData() {
 
 	// Collect data from regular forms, but only visible ones
 	const allForms = document.querySelectorAll("form");
-	const visibleForms = Array.from(allForms).filter(form => isElementVisible(form));
-	
+	const visibleForms = Array.from(allForms).filter((form) =>
+		isElementVisible(form),
+	);
+
 	for (const form of visibleForms) {
 		// Only use visible form elements
 		const formElements = Array.from(form.elements).filter((el) => {
@@ -1343,8 +1548,8 @@ export function collectFormData() {
 			return (
 				((tagName === "input" &&
 					!["submit", "button", "reset", "hidden"].includes(type)) ||
-				tagName === "select" ||
-				tagName === "textarea") &&
+					tagName === "select" ||
+					tagName === "textarea") &&
 				isElementVisible(el)
 			);
 		});
@@ -1386,7 +1591,7 @@ export function collectFormData() {
 	);
 
 	const visibleStandaloneInputs = Array.from(allStandaloneInputs).filter(
-		input => isElementVisible(input)
+		(input) => isElementVisible(input),
 	);
 
 	if (visibleStandaloneInputs.length > 0) {
