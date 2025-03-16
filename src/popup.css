@@ -174,6 +174,97 @@ input:checked + .toggle-slider:before {
   box-shadow: 0 0 0 2px var(--primary-light);
 }
 
+.input-info {
+  font-size: 12px;
+  color: var(--text-light);
+  margin-top: 5px;
+}
+
+/* Structured data styles */
+.data-mode-toggle {
+  display: flex;
+  margin-bottom: 15px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.data-mode-toggle button {
+  flex: 1;
+  background: var(--background-light);
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.data-mode-toggle button.active {
+  background: var(--primary-color);
+  color: white;
+  font-weight: 500;
+}
+
+.structured-data {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.structured-data .categories {
+  display: flex;
+  overflow-x: auto;
+  background-color: var(--background-light);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.structured-data .categories button {
+  padding: 10px 15px;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.structured-data .categories button.active {
+  background-color: white;
+  border-bottom: 2px solid var(--primary-color);
+  font-weight: 500;
+}
+
+.fields-container {
+  padding: 15px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.field-row {
+  margin-bottom: 12px;
+}
+
+.field-row label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 3px;
+  color: var(--text-light);
+}
+
+.field-row input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.field-row input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
 /* Info Box */
 .info-box {
   background-color: var(--background-light);
@@ -184,52 +275,86 @@ input:checked + .toggle-slider:before {
   color: var(--text-light);
 }
 
-/* Custom Fields */
-.custom-fields h3 {
-  margin-bottom: 10px;
+/* Advanced Tab */
+.advanced-tab {
+  padding: 15px;
+}
+
+.advanced-tab h3 {
+  margin: 15px 0 10px;
   font-size: 16px;
   font-weight: 500;
 }
 
-.custom-field-row {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 8px;
+.advanced-tab .form-group {
+  margin-bottom: 15px;
 }
 
-.custom-field-row input {
-  flex: 1;
-  padding: 8px;
+.advanced-tab select {
+  width: 100%;
+  padding: 8px 12px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
+  background-color: white;
 }
 
-.remove-btn {
-  background-color: var(--danger-color);
+.model-info {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+.cache-section {
+  background-color: var(--background-light);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 15px;
+  margin-top: 20px;
+}
+
+.cache-stats {
+  display: flex;
+  justify-content: space-between;
+  margin: 15px 0;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-light);
+  margin-bottom: 5px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.clear-cache-btn {
+  background-color: var(--warning-color);
   color: white;
   border: none;
   border-radius: 4px;
-  width: 30px;
-  cursor: pointer;
-  font-size: 18px;
-}
-
-.add-field-btn {
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  border: 1px solid var(--primary-color);
-  border-radius: 4px;
   padding: 8px 12px;
   cursor: pointer;
-  margin-top: 10px;
-  font-weight: 500;
   width: 100%;
+  font-weight: 500;
 }
 
-.add-field-btn:hover {
-  background-color: var(--primary-color);
-  color: white;
+.clear-cache-btn:hover {
+  opacity: 0.9;
+}
+
+.clear-cache-btn:disabled {
+  background-color: var(--border-color);
+  cursor: not-allowed;
 }
 
 /* Action Buttons */

@@ -8,12 +8,100 @@
  * 4. Matching form data with user context
  */
 
-// Cache for GPT responses (in-memory)
-const gptResponseCache = new Map();
-const CACHE_EXPIRATION = 60 * 60 * 1000; // 1 hour in milliseconds
+// Enhanced cache system for GPT responses
+const CACHE_SETTINGS = {
+	MAX_SIZE: 50, // Maximum number of entries in cache
+	DEFAULT_EXPIRATION: 60 * 60 * 1000, // 1 hour default
+	FORM_EXPIRATION: 24 * 60 * 60 * 1000, // 24 hours for form structure
+};
+
+// Cache with access timestamps for LRU eviction
+class EnhancedCache {
+	constructor() {
+		this.cache = new Map();
+		this.accessOrder = [];
+	}
+
+	// Get value from cache
+	get(key) {
+		const entry = this.cache.get(key);
+		if (!entry) return null;
+
+		// Update access timestamp and order
+		this.updateAccessTime(key);
+
+		// Check if entry is expired
+		if (Date.now() > entry.expiresAt) {
+			this.delete(key);
+			return null;
+		}
+
+		return entry.data;
+	}
+
+	// Set value in cache with optional custom expiration
+	set(key, data, expiration = CACHE_SETTINGS.DEFAULT_EXPIRATION) {
+		// Enforce size limit - remove least recently used if at capacity
+		if (this.cache.size >= CACHE_SETTINGS.MAX_SIZE && !this.cache.has(key)) {
+			this.evictLRU();
+		}
+
+		const expiresAt = Date.now() + expiration;
+		this.cache.set(key, { data, expiresAt });
+		this.updateAccessTime(key);
+
+		return this;
+	}
+
+	// Delete a specific cache entry
+	delete(key) {
+		this.cache.delete(key);
+		const index = this.accessOrder.indexOf(key);
+		if (index > -1) {
+			this.accessOrder.splice(index, 1);
+		}
+	}
+
+	// Clear all cache entries
+	clear() {
+		this.cache.clear();
+		this.accessOrder = [];
+	}
+
+	// Check if key exists in cache
+	has(key) {
+		return this.cache.has(key);
+	}
+
+	// Get cache size
+	get size() {
+		return this.cache.size;
+	}
+
+	// Update access time and move to most-recently-used position
+	updateAccessTime(key) {
+		const index = this.accessOrder.indexOf(key);
+		if (index > -1) {
+			this.accessOrder.splice(index, 1);
+		}
+		this.accessOrder.push(key);
+	}
+
+	// Evict least recently used entry
+	evictLRU() {
+		if (this.accessOrder.length > 0) {
+			const lruKey = this.accessOrder.shift();
+			this.cache.delete(lruKey);
+		}
+	}
+}
+
+// Initialize caches
+const formStructureCache = new EnhancedCache(); // Cache for HTML form structure
+const formFillCache = new EnhancedCache(); // Cache for form field values
 
 /**
- * Cleans HTML to reduce token usage by removing unnecessary content.
+ * Simplified HTML cleaning to reduce token usage.
  *
  * @param {string} html - Raw HTML content
  * @returns {string} - Cleaned HTML with only relevant form elements
@@ -23,106 +111,93 @@ function cleanHTML(html) {
 	const parser = new DOMParser();
 	const doc = parser.parseFromString(html, "text/html");
 
-	// Remove all non-essential elements in one operation for better performance
-	const nonEssentialSelectors = [
-		"script", "style", "link", "img", "svg", "video", 
-		"audio", "canvas", "iframe", "noscript", "meta",
-		"footer", "header", "aside", "nav", "div.banner", 
-		"div.advertisement", "div.footer", "div.header",
-		"[class*='banner']", "[class*='ad-']", "[class*='footer']",
-		"[class*='header']", "[id*='banner']", "[id*='ad-']"
-	].join(",");
-	
+	// Remove all non-essential elements in one operation
+	const nonEssentialSelectors =
+		"script, style, link, img, svg, video, audio, canvas, iframe";
 	const nonEssentialElements = doc.querySelectorAll(nonEssentialSelectors);
-	nonEssentialElements.forEach(el => el.remove());
+	nonEssentialElements.forEach((el) => el.remove());
 
 	// Extract just the form elements and their context
 	const relevantHTML = [];
 
-	// Optimized attribute cleaning - only keep essential attributes in one pass
-	const cleanAttributes = (element) => {
-		const attributesToKeep = new Set([
-			"id", "name", "type", "value", "placeholder", 
-			"for", "checked", "selected", "required"
-		]);
-		
-		// Remove all non-essential attributes in one pass
-		for (let i = element.attributes.length - 1; i >= 0; i--) {
-			const attr = element.attributes[i];
+	// Essential attributes to keep
+	const attributesToKeep = new Set([
+		"id",
+		"name",
+		"type",
+		"value",
+		"placeholder",
+		"for",
+		"required",
+	]);
+
+	// Process forms
+	const forms = doc.querySelectorAll("form");
+	forms.forEach((form) => {
+		// Skip empty forms
+		const formInputs = form.querySelectorAll(
+			'input:not([type="submit"]):not([type="button"]), select, textarea',
+		);
+		if (formInputs.length === 0) return;
+
+		// Clean form attributes
+		for (let i = form.attributes.length - 1; i >= 0; i--) {
+			const attr = form.attributes[i];
 			if (!attributesToKeep.has(attr.name)) {
-				element.removeAttribute(attr.name);
+				form.removeAttribute(attr.name);
 			}
 		}
 
-		// Process children only once
-		const children = Array.from(element.children);
-		children.forEach(child => cleanAttributes(child));
-		
-		return element;
-	};
+		// Clean input attributes
+		formInputs.forEach((input) => {
+			for (let i = input.attributes.length - 1; i >= 0; i--) {
+				const attr = input.attributes[i];
+				if (!attributesToKeep.has(attr.name)) {
+					input.removeAttribute(attr.name);
+				}
+			}
+		});
 
-	// Process forms with minimal HTML structure
-	const forms = doc.querySelectorAll("form");
-	forms.forEach(form => {
-		const formId = form.id || "";
-		const formName = form.name || "";
-		
-		// Get only the essential form inputs
-		const formInputs = form.querySelectorAll('input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]), select, textarea');
-		
-		// If form has no relevant inputs, skip it
-		if (formInputs.length === 0) return;
-		
-		// Clone once and clean attributes
-		const formClone = form.cloneNode(true);
-		cleanAttributes(formClone);
-		
-		// Create minimal form HTML
-		const formHTML = `<form id="${formId}" name="${formName}">${formClone.innerHTML}</form>`;
-		relevantHTML.push(formHTML);
+		relevantHTML.push(form.outerHTML);
 	});
 
-	// Process standalone inputs more efficiently
-	const inputSelectors = [
-		'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not(form *)',
-		"select:not(form *)",
-		"textarea:not(form *)",
-		'div[id^="Select"]:not(form *)',
-	].join(",");
+	// Process standalone inputs
+	const standaloneInputs = doc.querySelectorAll(
+		"input:not(form *), select:not(form *), textarea:not(form *)",
+	);
 
-	const standaloneInputs = doc.querySelectorAll(inputSelectors);
-	
 	if (standaloneInputs.length > 0) {
 		relevantHTML.push('<div class="standalone-inputs">');
-		
-		// Build a map of labels for faster lookups
+
+		// Collect labels
+		const labels = doc.querySelectorAll("label[for]");
 		const labelMap = new Map();
-		const labels = doc.querySelectorAll('label[for]');
-		labels.forEach(label => {
-			labelMap.set(label.getAttribute('for'), label);
+		labels.forEach((label) => {
+			labelMap.set(label.getAttribute("for"), label);
 		});
 
-		standaloneInputs.forEach(input => {
-			// Clone and clean in one operation
-			const inputClone = input.cloneNode(true);
-			cleanAttributes(inputClone);
-			
-			// Lookup label from map instead of querying DOM again
+		standaloneInputs.forEach((input) => {
+			// Clean attributes
+			for (let i = input.attributes.length - 1; i >= 0; i--) {
+				const attr = input.attributes[i];
+				if (!attributesToKeep.has(attr.name)) {
+					input.removeAttribute(attr.name);
+				}
+			}
+
+			// Add label if it exists
 			let labelHTML = "";
 			if (input.id && labelMap.has(input.id)) {
-				const labelClone = labelMap.get(input.id).cloneNode(true);
-				cleanAttributes(labelClone);
-				labelHTML = labelClone.outerHTML;
+				const label = labelMap.get(input.id);
+				labelHTML = `<label for="${input.id}">${label.textContent}</label>`;
 			}
-			
-			// Compact HTML structure
-			relevantHTML.push(`<div class="input-group">${labelHTML}${inputClone.outerHTML}</div>`);
+
+			relevantHTML.push(`<div>${labelHTML}${input.outerHTML}</div>`);
 		});
-		
+
 		relevantHTML.push("</div>");
 	}
 
-	// Return compact HTML with minimal whitespace
 	return relevantHTML.join("");
 }
 
@@ -149,7 +224,7 @@ function createCacheKey(url, html) {
 }
 
 /**
- * Processes page HTML using GPT to extract form fields
+ * Processes page HTML using GPT to extract form fields with enhanced caching
  *
  * @param {Object} params - Processing parameters
  * @param {string} params.apiKey - OpenAI API key
@@ -164,188 +239,301 @@ async function processHTMLWithGPT({ apiKey, html, url }) {
 	try {
 		// Clean the HTML to reduce token usage
 		const cleanedHTML = cleanHTML(html);
-		console.log("Cleaned HTML:", cleanedHTML);
+
 		// Generate cache key
 		const cacheKey = createCacheKey(url, cleanedHTML);
-		console.log("Cache key:", cacheKey);
-		// Check if we have a valid cached response
-		if (gptResponseCache.has(cacheKey)) {
-			const cachedResponse = gptResponseCache.get(cacheKey);
+		console.log("Form structure cache key:", cacheKey);
 
-			// Check if the cache is still valid
-			if (Date.now() - cachedResponse.timestamp < CACHE_EXPIRATION) {
-				console.log("Using cached GPT response");
-				return cachedResponse.data;
-			}
-
-			// Cache has expired, remove it
-			gptResponseCache.delete(cacheKey);
+		// Check if we have a valid cached form structure
+		const cachedFields = formStructureCache.get(cacheKey);
+		if (cachedFields) {
+			console.log("Using cached form structure");
+			return cachedFields;
 		}
 
-		// Build the prompt for GPT
+		// No valid cache found, proceed with API request
 		const prompt = buildHTMLExtractPrompt(cleanedHTML, url);
-		console.log("GPT Prompt:", prompt);
-		// Make the API request
+		console.log("Prompt for GPT:", prompt);
 		const response = await fetchGPTResponse(apiKey, prompt);
-		console.log("GPT Response:", response);
-		// Process and validate the response
 		const extractedFields = processGPTFieldExtractionResponse(response);
 		console.log("Extracted fields:", extractedFields);
-		// Cache the response
-		gptResponseCache.set(cacheKey, {
-			timestamp: Date.now(),
-			data: extractedFields,
-		});
-		console.log("set cache", gptResponseCache);
+		// Only cache if we got valid fields
+		if (extractedFields && extractedFields.length > 0) {
+			// Use longer expiration for form structure (forms don't change often)
+			formStructureCache.set(
+				cacheKey,
+				extractedFields,
+				CACHE_SETTINGS.FORM_EXPIRATION,
+			);
+			console.log(
+				`Cached ${extractedFields.length} form fields. Cache size: ${formStructureCache.size}`,
+			);
+		}
+
 		return extractedFields;
 	} catch (error) {
 		console.error("Error processing HTML with GPT:", error);
-		throw error;
+		// Return empty array instead of throwing to be more resilient
+		return [];
 	}
 }
 
 /**
- * Builds the prompt for GPT to extract form fields from HTML
+ * Simplified prompt for GPT to extract form fields from HTML
  *
  * @param {string} html - Cleaned HTML content
  * @param {string} url - Current page URL
  * @returns {string} - Prompt for GPT
  */
 function buildHTMLExtractPrompt(html, url) {
-	return `
-You are a form field extraction assistant. Your task is to analyze HTML form content and extract all visible form fields.
-
-## HTML Content from ${url}:
+	return `Extract all form fields from this HTML from ${url}:
 \`\`\`html
 ${html}
 \`\`\`
 
-## Instructions:
-1. Extract all form elements information
-2. For each field, identify:
-   - formId: The ID of the form or a generated ID if standalone
-   - id: The field's ID or name attribute
-   - label: The text label associated with the field
-   - type: The field type (text, email, checkbox, radio, select, etc.)
-   - options: For select fields, list all available options
-   - placeholder: The placeholder text if available
-   - required: Whether the field is required (true/false)
-   - value: The default value if available
-   - checked: For checkboxes/radio buttons, whether it's checked (true/false)
-   - selected: For select fields, whether it's selected (true/false)
-   - for: The ID of the label associated with the field
-   - name: The field's name attribute if available
+Return a JSON array of objects with these properties:
+- formId: Form ID or "virtual-form" for standalone inputs
+- id: Field ID or name
+- label: Associated label text
+- type: Field type (text, email, etc.)
 
-3. Return ONLY a valid JSON array with the following structure:
+Example:
 [
-  {
-    "formId": "form1",
-    "id": "name",
-    "label": "Full Name",
-    "type": "text"
-  },
-  {
-    "formId": "virtual-form1",
-    "id": "email",
-    "label": "Email Address",
-    "type": "email"
-  }
+  {"formId":"form1","id":"name","label":"Full Name","type":"text"},
+  {"formId":"virtual-form","id":"email","label":"Email","type":"email"}
 ]
 
-For standalone inputs, use a virtual form ID like "virtual-form1".
-Return ONLY the JSON array, no explanations or other text.
-`;
+Return ONLY the JSON array, nothing else.`;
 }
 
 /**
- * Processes form elements and user context to determine field values
+ * Processes form elements and user context to determine field values with enhanced caching
  *
  * @param {Object} params - Processing parameters
  * @param {string} params.apiKey - OpenAI API key
  * @param {Array} params.formElements - Array of extracted form elements
- * @param {string} params.userConversation - User context data
- * @param {string} [params.formFieldHints] - Additional hints
+ * @param {string|Object} params.userConversation - Free text context data
+ * @param {Object} [params.structuredData] - Structured user data
+ * @param {boolean} [params.useStructuredData] - Whether to use structured data
  * @returns {Promise<Array>} - Mapped form fields with values
  */
 async function processFormWithGPT({
 	apiKey,
 	formElements,
 	userConversation,
-	formFieldHints = "",
+	structuredData = {},
+	useStructuredData = false,
 }) {
-	// Validate required parameters
-	if (!apiKey) throw new Error("API key is required");
-	if (!formElements || !Array.isArray(formElements))
-		throw new Error("Form elements array is required");
-	if (!userConversation) throw new Error("User conversation is required");
+	// Basic validation
+	if (!apiKey || !formElements || !Array.isArray(formElements)) {
+		console.error("Missing required parameters for form processing");
+		return [];
+	}
+
+	// Check if we have valid user data based on the selected mode
+	if (
+		useStructuredData &&
+		(!structuredData || Object.keys(structuredData).length === 0)
+	) {
+		console.error(
+			"Structured data mode is enabled but no structured data provided",
+		);
+		return [];
+	}
+
+	if (
+		!useStructuredData &&
+		(!userConversation || userConversation.trim() === "")
+	) {
+		console.error("Free text mode is enabled but no context data provided");
+		return [];
+	}
 
 	try {
-		// Prepare prompt for GPT
-		const prompt = buildGPTPrompt(
+		// Use the appropriate data source based on mode
+		const userData = useStructuredData ? structuredData : userConversation;
+
+		// Create a cache key based on essential form information and user data
+		const cacheKey = createFormFillCacheKey(
 			formElements,
-			userConversation,
-			formFieldHints,
+			userData,
+			useStructuredData,
 		);
-		console.log("GPT Prompt:", prompt);
-		// Make request to OpenAI API
+		console.log("Form fill cache key:", cacheKey);
+
+		// Check if we have a valid cached mapping
+		const cachedMapping = formFillCache.get(cacheKey);
+		if (cachedMapping) {
+			console.log("Using cached form mapping");
+			return cachedMapping;
+		}
+
+		// No cache found, proceed with API request
+		const prompt = buildGPTPrompt(formElements, userData, useStructuredData);
 		const response = await fetchGPTResponse(apiKey, prompt);
-		console.log("GPT Response:", response);
-		// Process and validate the response
-		return processGPTMappingResponse(response, formElements);
+		const mappings = processGPTMappingResponse(response, formElements);
+
+		// Only cache if we got valid mappings
+		if (mappings && mappings.length > 0) {
+			formFillCache.set(cacheKey, mappings);
+			console.log(
+				`Cached ${mappings.length} form field mappings. Cache size: ${formFillCache.size}`,
+			);
+		}
+
+		return mappings;
 	} catch (error) {
 		console.error("Error processing form with GPT:", error);
-		throw error;
+		return [];
 	}
 }
 
 /**
- * Builds the prompt for GPT to match form fields with user context
+ * Creates a cache key for form fill mappings based on form elements and user context
  *
  * @param {Array} formElements - Form elements to fill
- * @param {string} userConversation - User context
- * @param {string} formFieldHints - Additional hints
- * @returns {string} - Complete prompt
+ * @param {string|Object} userData - User context data (either free text or structured)
+ * @param {boolean} isStructured - Whether the data is structured
+ * @returns {string} - Cache key
  */
-function buildGPTPrompt(formElements, userConversation, formFieldHints) {
-	return `
-You are a form-filling assistant. You need to match form fields with appropriate values from the conversation context.
+function createFormFillCacheKey(formElements, userData, isStructured = false) {
+	// Extract essential form information
+	const formInfo = formElements.map((el) => {
+		// Include only essential properties to identify the form field
+		return {
+			id: el.id || "",
+			label: el.label || "",
+			type: el.type || "",
+			formId: el.formId || "",
+		};
+	});
 
-## Form Elements:
-${JSON.stringify(formElements, null, 2)}
+	// Create hash of form structure
+	const formHash = JSON.stringify(formInfo);
+	let formHashCode = 0;
+	for (let i = 0; i < formHash.length; i++) {
+		formHashCode = (formHashCode << 5) - formHashCode + formHash.charCodeAt(i);
+		formHashCode |= 0;
+	}
 
-## User Conversation Context:
-${userConversation}
+	// Create hash of user data - handle differently based on type
+	let dataString;
 
-${formFieldHints ? `## Additional Field Hints:\n${formFieldHints}` : ""}
+	if (isStructured) {
+		// For structured data, create a consistent string representation
+		dataString = Object.entries(userData)
+			.flatMap(([category, fields]) =>
+				Object.entries(fields)
+					.filter(([_, value]) => value && value.trim())
+					.map(([field, value]) => `${category}.${field}:${value}`),
+			)
+			.sort() // Sort to ensure consistent ordering
+			.join("|");
+	} else {
+		// For free text, just take the first portion
+		dataString = userData.substring(0, 100);
+	}
 
-## Instructions:
-1. Analyze the form elements and their labels/types
-2. Identify relevant information from the conversation context
-3. Match the form fields with appropriate values, finding the best match possible for each field based on the context provided in the conversation
-4. Include ALL of these identifiers in your response to maximize matching success:
-   - formId: Always include the form ID even for standalone inputs
-   - id: Include the field's ID or name
-   - label: Always include the exact label text as it appears
-5. Return ONLY a JSON array with the following structure:
-[
-  {
-    "formId": "form1",
-    "id": "name",
-    "label": "Full Name",
-    "value": "John Smith",
-    "type": "text"
-  }
-]
+	// Calculate hash for the data string
+	let contextHashCode = 0;
+	for (let i = 0; i < dataString.length; i++) {
+		contextHashCode =
+			(contextHashCode << 5) - contextHashCode + dataString.charCodeAt(i);
+		contextHashCode |= 0;
+	}
 
-It's CRITICAL to include ALL identifiers (formId, id, and label) for each field to ensure proper matching.
-For select fields, ensure the value matches one of the available options.
-For radio/checkbox fields, set the value to "true" or "false".
-Do not include any explanation, just the JSON array.
-`;
+	// Include data type in the key
+	const dataType = isStructured ? "structured" : "freetext";
+
+	return `form-${formHashCode}-${dataType}-${contextHashCode}`;
 }
 
 /**
- * Makes a request to the OpenAI API
+ * Builds a prompt for GPT based on either structured or free-text user data
+ *
+ * @param {Array} formElements - Form elements to fill
+ * @param {string|Object} userData - User context data (either free text or structured object)
+ * @param {boolean} isStructured - Whether the data is structured or free text
+ * @returns {string} - Complete prompt for GPT
+ */
+function buildGPTPrompt(formElements, userData, isStructured = false) {
+	// Create the prompt differently based on data type
+	let userInfoSection = "";
+
+	if (isStructured) {
+		// Format structured data for better readability
+		userInfoSection = "User information (structured):\n";
+
+		// Iterate through each category in the structured data
+		for (const [category, fields] of Object.entries(userData)) {
+			userInfoSection += `\n${category.toUpperCase()}:\n`;
+
+			// Add each field in this category
+			for (const [field, value] of Object.entries(fields)) {
+				if (value && value.trim()) {
+					userInfoSection += `- ${field}: ${value}\n`;
+				}
+			}
+		}
+	} else {
+		// Use free text data directly
+		userInfoSection = `User information:\n${userData}`;
+	}
+
+	return `Fill these form fields with values from the user information:
+
+Fields: ${JSON.stringify(formElements)}
+
+${userInfoSection}
+
+Return a JSON array where each object has:
+- formId: Same as input
+- id: Same as input
+- label: Same as input
+- value: The value to fill in
+- type: Same as input
+
+IMPORTANT RULES:
+- For checkboxes/radio: use "true" or "false"
+- For selects: use an existing option
+- For ALL date fields: ALWAYS format dates as YYYY-MM-DD, no matter how they appear in the user information
+- For date fields with type "date": ALWAYS ensure the format is YYYY-MM-DD (year-month-day)
+
+Example:
+[
+  {"formId":"form1","id":"name","label":"Full Name","value":"John Smith","type":"text"},
+  {"formId":"form1","id":"birthdate","label":"Date of Birth","value":"1990-05-15","type":"date"}
+]
+
+Return ONLY JSON array, nothing else.`;
+}
+
+// Available LLM models
+const MODELS = {
+	FAST: "gpt-3.5-turbo-0125", // Faster, cheaper
+	STANDARD: "gpt-3.5-turbo", // Default
+	ADVANCED: "gpt-4o-mini", // Better accuracy but slower
+};
+
+// Current model setting - can be changed in settings
+let currentModel = MODELS.FAST;
+
+/**
+ * Sets the AI model to use for queries
+ *
+ * @param {string} modelName - Model name to use (from MODELS object)
+ */
+function setModel(modelName) {
+	if (MODELS[modelName]) {
+		currentModel = MODELS[modelName];
+	} else {
+		// If invalid model name, default to STANDARD
+		currentModel = MODELS.STANDARD;
+	}
+}
+
+/**
+ * Makes a request to the OpenAI API with simplified parameters
  *
  * @param {string} apiKey - OpenAI API key
  * @param {string} prompt - Prompt for GPT
@@ -359,19 +547,19 @@ async function fetchGPTResponse(apiKey, prompt) {
 			Authorization: `Bearer ${apiKey}`,
 		},
 		body: JSON.stringify({
-			model: "gpt-3.5-turbo",
+			model: currentModel,
 			messages: [
 				{
 					role: "system",
 					content:
-						"You are a form field analysis assistant. Your task is to extract information from HTML and conversation context to fill form fields. Return only valid JSON.",
+						"Extract form fields or fill forms based on user info. Return JSON only.",
 				},
 				{
 					role: "user",
 					content: prompt,
 				},
 			],
-			temperature: 0.3,
+			temperature: 0.2,
 		}),
 	});
 
@@ -386,109 +574,74 @@ async function fetchGPTResponse(apiKey, prompt) {
 }
 
 /**
- * Processes the GPT response for HTML field extraction
+ * Simplified processor for GPT field extraction response
  *
  * @param {Object} response - GPT API response
  * @returns {Array} - Extracted form fields
  */
 function processGPTFieldExtractionResponse(response) {
-	// Extract the content from the GPT response
+	// Extract content from response
 	const content = response.choices?.[0]?.message?.content;
 	if (!content) {
 		throw new Error("Invalid response from GPT");
 	}
 
-	// Extract JSON from the response
-	let fields;
+	// Parse JSON from content
 	try {
-		// Find JSON array in the response
-		const jsonMatch = content.match(/\[[\s\S]*\]/);
+		// Find JSON array in content (anything between square brackets)
+		const jsonMatch = content.match(/\[(.|\n)*\]/m);
 		if (jsonMatch) {
-			fields = JSON.parse(jsonMatch[0]);
+			const fields = JSON.parse(jsonMatch[0]);
+			return Array.isArray(fields) ? fields : [];
 		} else {
-			throw new Error("No JSON array found in response");
+			console.error("No JSON array found in response:", content);
+			return [];
 		}
 	} catch (error) {
 		console.error("Error parsing GPT response:", error);
-		throw new Error("Failed to parse GPT response");
+		return [];
 	}
-
-	// Validate the fields
-	if (!Array.isArray(fields)) {
-		throw new Error("GPT response is not an array");
-	}
-
-	return fields;
 }
 
 /**
- * Processes the GPT response for form field mapping
+ * Simplified processor for GPT form field mapping response
  *
  * @param {Object} response - GPT API response
  * @param {Array} formElements - Original form elements
  * @returns {Array} - Mapped form fields with values
  */
 function processGPTMappingResponse(response, formElements) {
-	// Extract the content from the GPT response
+	// Extract content from response
 	const content = response.choices?.[0]?.message?.content;
 	if (!content) {
-		throw new Error("Invalid response from GPT");
+		console.error("Invalid response from GPT");
+		return [];
 	}
 
-	console.log("Raw GPT response content:", content);
-
-	// Extract JSON from the response
-	let mappings;
+	// Parse JSON from content
+	let mappings = [];
 	try {
-		// Find JSON array in the response
-		const jsonMatch = content.match(/\[[\s\S]*\]/);
+		// Find JSON array in content
+		const jsonMatch = content.match(/\[(.|\n)*\]/m);
 		if (jsonMatch) {
 			mappings = JSON.parse(jsonMatch[0]);
-			console.log("Parsed mappings from GPT:", JSON.stringify(mappings, null, 2));
+			if (!Array.isArray(mappings)) mappings = [];
 		} else {
-			throw new Error("No JSON array found in response");
+			console.error("No JSON array found in response");
 		}
 	} catch (error) {
 		console.error("Error parsing GPT response:", error);
-		throw new Error("Failed to parse GPT response");
+		return [];
 	}
 
-	// Validate the mappings
-	if (!Array.isArray(mappings)) {
-		throw new Error("GPT response is not an array");
-	}
-
-	// Create maps of valid element IDs, names, labels, and formIds
-	const validElementIds = new Map();
-	const validElementLabels = new Map();
-	const validElementFormIds = new Map();
-	
-	console.log("Form elements for validation:", JSON.stringify(formElements, null, 2));
-	
-	formElements.forEach((el) => {
-		if (el.id) validElementIds.set(el.id, el);
-		if (el.name) validElementIds.set(el.name, el);
-		if (el.label) validElementLabels.set(el.label.toLowerCase(), el);
-		if (el.formId) validElementFormIds.set(el.formId, el);
-	});
-
-	console.log("Valid element IDs:", Array.from(validElementIds.keys()));
-	console.log("Valid element labels:", Array.from(validElementLabels.keys()));
-
-	// Convert mappings to the format expected by formUtils with htmlElementId property
-	const processedMappings = mappings.map(mapping => {
-		// Create a new object with htmlElementId property
-		return {
-			htmlElementId: mapping.id || "",
-			value: mapping.value || "",
-			label: mapping.label || "",
-			formId: mapping.formId || "",
-			type: mapping.type || ""
-		};
-	});
-
-	console.log("Prepared mappings for form filling:", JSON.stringify(processedMappings, null, 2));
-	return processedMappings;
+	// Convert mappings to the format expected by formUtils
+	return mappings.map((mapping) => ({
+		htmlElementId: mapping.id || "",
+		value: mapping.value || "",
+		label: mapping.label || "",
+		formId: mapping.formId || "",
+		type: mapping.type || "",
+	}));
 }
 
 /**
@@ -533,5 +686,34 @@ function isValidValueForElement(value, element) {
 	}
 }
 
+/**
+ * Clears all cached data
+ */
+function clearCache() {
+	formStructureCache.clear();
+	formFillCache.clear();
+	console.log("All caches cleared");
+}
+
+/**
+ * Gets information about the current cache state
+ *
+ * @returns {Object} - Cache statistics
+ */
+function getCacheStats() {
+	return {
+		formStructureSize: formStructureCache.size,
+		formFillSize: formFillCache.size,
+		settings: CACHE_SETTINGS,
+	};
+}
+
 // Export the functions
-export { processFormWithGPT, processHTMLWithGPT };
+export {
+	processFormWithGPT,
+	processHTMLWithGPT,
+	setModel,
+	MODELS,
+	clearCache,
+	getCacheStats,
+};

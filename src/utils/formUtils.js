@@ -724,56 +724,56 @@ export function fillVirtualFormWithMappings(virtualForm, mappings) {
 		}
 
 		// Try to find by type only as a fallback
-		if (!element && type && typeMap.has(type)) {
-			const typeInputs = typeMap.get(type);
-			if (typeInputs.length > 0) {
-				// If we have multiple inputs of the same type, try to match by label
-				if (typeInputs.length > 1 && label) {
-					// Find the input closest to text that matches our label
-					for (const input of typeInputs) {
-						const inputRect = input.getBoundingClientRect();
+		// if (!element && type && typeMap.has(type)) {
+		// 	const typeInputs = typeMap.get(type);
+		// 	if (typeInputs.length > 0) {
+		// 		// If we have multiple inputs of the same type, try to match by label
+		// 		if (typeInputs.length > 1 && label) {
+		// 			// Find the input closest to text that matches our label
+		// 			for (const input of typeInputs) {
+		// 				const inputRect = input.getBoundingClientRect();
 
-						// Look for text containing our label near this input
-						let found = false;
-						const walker = document.createTreeWalker(
-							document.body,
-							NodeFilter.SHOW_TEXT,
-						);
-						let textNode;
+		// 				// Look for text containing our label near this input
+		// 				let found = false;
+		// 				const walker = document.createTreeWalker(
+		// 					document.body,
+		// 					NodeFilter.SHOW_TEXT,
+		// 				);
+		// 				let textNode;
 
-						while ((textNode = walker.nextNode())) {
-							const text = textNode.textContent.trim();
-							if (text.toLowerCase().includes(label.toLowerCase())) {
-								const textRect = textNode.parentElement.getBoundingClientRect();
-								// Check if within reasonable distance
-								const distance =
-									Math.abs(textRect.top - inputRect.top) +
-									Math.abs(textRect.left - inputRect.left);
-								if (distance < 200) {
-									// arbitrary threshold
-									element = input;
-									console.log(
-										`Found element by type and proximity to label: ${input.id || input.name}`,
-									);
-									found = true;
-									break;
-								}
-							}
-						}
+		// 				while ((textNode = walker.nextNode())) {
+		// 					const text = textNode.textContent.trim();
+		// 					if (text.toLowerCase().includes(label.toLowerCase())) {
+		// 						const textRect = textNode.parentElement.getBoundingClientRect();
+		// 						// Check if within reasonable distance
+		// 						const distance =
+		// 							Math.abs(textRect.top - inputRect.top) +
+		// 							Math.abs(textRect.left - inputRect.left);
+		// 						if (distance < 200) {
+		// 							// arbitrary threshold
+		// 							element = input;
+		// 							console.log(
+		// 								`Found element by type and proximity to label: ${input.id || input.name}`,
+		// 							);
+		// 							found = true;
+		// 							break;
+		// 						}
+		// 					}
+		// 				}
 
-						if (found) break;
-					}
-				}
+		// 				if (found) break;
+		// 			}
+		// 		}
 
-				// If we still don't have an element, just take the first one of this type
-				if (!element) {
-					element = typeInputs[0];
-					console.log(
-						`Using first ${type} element found: ${element.id || element.name || "unnamed"}`,
-					);
-				}
-			}
-		}
+		// 		// If we still don't have an element, just take the first one of this type
+		// 		if (!element) {
+		// 			element = typeInputs[0];
+		// 			console.log(
+		// 				`Using first ${type} element found: ${element.id || element.name || "unnamed"}`,
+		// 			);
+		// 		}
+		// 	}
+		// }
 
 		// If we still can't find it, try partial ID matching
 		if (!element && htmlElementId) {
@@ -832,7 +832,11 @@ export function fillElement(element, value) {
 		console.log(`Filling ${tagName} (type=${type}) with value: "${value}"`);
 
 		// Special handling for custom selects (e.g., gender dropdown)
-		if (tagName === "div" && element.id && element.id.startsWith("Select")) {
+		if (
+			tagName === "div" &&
+			element.id &&
+			element.id.toLocaleLowerCase().includes("select")
+		) {
 			// Find the hidden input to set its value
 			const hiddenInput = element.querySelector('input[type="hidden"]');
 			if (hiddenInput) {
@@ -840,7 +844,6 @@ export function fillElement(element, value) {
 
 				// Find and update the visible selection text
 				const displayElement =
-					element.querySelector(".sc-deXhhX") ||
 					element.querySelector('[class*="select"]') ||
 					element.querySelector('[class*="dropdown"]');
 
@@ -892,7 +895,7 @@ export function fillElement(element, value) {
 			return false;
 		}
 		// Standard handling for regular elements
-		else if (tagName === "select") {
+		if (tagName === "select") {
 			fillSelectElement(element, value);
 		} else if (type === "checkbox" || type === "radio") {
 			fillCheckboxOrRadio(element, value);
@@ -1252,98 +1255,32 @@ function fillInputElement(element, value) {
 	let valueToInsert = value;
 
 	if (element.type === "date" && value) {
-		try {
-			let date;
-			// Handle different date formats
-
-			// Check if it's a Brazilian format (DD/MM/YYYY)
-			if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-				const [day, month, year] = value.split("/");
-				date = new Date(`${year}-${month}-${day}`);
-			}
-			// Check if it's a date with slashes (MM/DD/YYYY) - US format
-			else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
-				date = new Date(value);
-			}
-			// Try with direct parsing (YYYY-MM-DD or other formats)
-			else {
-				date = new Date(value);
-			}
-
-			// Check if date is valid
-			if (isNaN(date.getTime())) {
-				throw new Error("Invalid date");
-			}
-
-			valueToInsert = date.toISOString().split("T")[0];
-		} catch (e) {
-			console.warn(`Invalid date value: ${value}`, e);
-			// Use the value directly if we couldn't parse it
-			valueToInsert = value;
-		}
-	} else if (element.getAttribute("maskplaceholder") === "dd/mm/yyyy") {
-		// Handle masked date inputs (usually in Brazilian format)
-		try {
-			let date;
-			// Try different formats
-			if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-				// Already in the right format
-				valueToInsert = value;
-			} else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-				// ISO format YYYY-MM-DD
-				const [year, month, day] = value.split("-");
-				valueToInsert = `${day}/${month}/${year}`;
-			} else {
-				// Try to parse and reformat
-				date = new Date(value);
-				if (!isNaN(date.getTime())) {
-					const day = String(date.getDate()).padStart(2, "0");
-					const month = String(date.getMonth() + 1).padStart(2, "0");
-					const year = date.getFullYear();
-					valueToInsert = `${day}/${month}/${year}`;
-				} else {
-					throw new Error("Invalid date");
-				}
-			}
-		} catch (e) {
-			console.warn(`Invalid date value for masked input: ${value}`, e);
-			valueToInsert = value;
-		}
+		console.log(`Trying to format date value: ${value}`);
+		
+		// Sistema de fallback para formatos de data
+		valueToInsert = tryFormatDate(element, value);
 	}
 
-	// First approach: Try with direct value setting
+	// Usar abordagem consistente de simulação de digitação
 	try {
-		// Clear existing value
+		// Limpar o campo e garantir foco
 		element.value = "";
-
-		// Focus on the input to activate any listeners
 		element.focus();
 
-		// Add debug logs
+		// Log para debug
 		console.log(
 			`Filling element ${element.id || element.name || "unnamed"} with value: "${valueToInsert}"`,
 		);
 
-		// Try simulating typing with small delays between keystrokes
+		// Simular digitação caractere a caractere
 		simulateTypingWithDelays(element, valueToInsert)
 			.then(() => {
 				console.log(
 					`Completed typing simulation for ${element.id || element.name || "unnamed"}`,
 				);
 
-				// Dispatch final blur event to trigger validation
-				const blurEvent = new Event("blur", { bubbles: true });
-				element.dispatchEvent(blurEvent);
-
-				// Double-check if value was set correctly
-				if (element.value.length < valueToInsert.length) {
-					console.warn(
-						`Typing simulation incomplete for ${element.id || element.name}: Expected "${valueToInsert}", got "${element.value}"`,
-					);
-					// Fallback to direct setting if typing simulation didn't complete properly
-					element.value = valueToInsert;
-					triggerFullEventSequence(element);
-				}
+				// Trigger final blur event
+				element.dispatchEvent(new Event("blur", { bubbles: true }));
 			})
 			.catch((error) => {
 				console.error(`Error during typing simulation: ${error}`);
@@ -1365,6 +1302,64 @@ function fillInputElement(element, value) {
 }
 
 /**
+ * Sistema de fallback para tentar diferentes formatos de data
+ * 
+ * @param {HTMLElement} element - O elemento de input do tipo date
+ * @param {string} value - O valor da data (espera-se que esteja em formato YYYY-MM-DD do GPT)
+ * @returns {string} - O valor formatado para inserção via eventos
+ */
+function tryFormatDate(element, value) {
+	// Se o valor já está no formato ISO (YYYY-MM-DD), usa como base
+	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		console.log(`Valor base no formato ISO: ${value}`);
+		
+		try {
+			// Criar um objeto Date a partir do formato ISO
+			const date = new Date(value);
+			
+			// Verificar se a data é válida
+			if (!isNaN(date.getTime())) {
+				// Como vamos continuar usando eventos para inserir, criamos um array 
+				// com todos os formatos possíveis para tentar em sequência
+				
+				// Extrai componentes da data
+				const year = date.getFullYear();
+				const month = (date.getMonth() + 1).toString().padStart(2, '0');
+				const day = date.getDate().toString().padStart(2, '0');
+				
+				// Array de formatos para tentar em sequência
+				const formats = [
+					value,                           // YYYY-MM-DD (ISO)
+					`${day}/${month}/${year}`,       // DD/MM/YYYY (brasileiro)
+					`${day}-${month}-${year}`,       // DD-MM-YYYY
+					`${day}.${month}.${year}`,       // DD.MM.YYYY
+					`${month}/${day}/${year}`,       // MM/DD/YYYY (americano)
+					`${month}-${day}-${year}`,       // MM-DD-YYYY
+					`${year}/${month}/${day}`,       // YYYY/MM/DD
+					`${day}${month}${year}`,         // DDMMYYYY
+					`${month}${day}${year}`,         // MMDDYYYY
+					`${year}${month}${day}`          // YYYYMMDD
+				];
+				
+				// Retorna o valor ISO original, mas armazena os formatos alternativos
+				// para tentar em sequência durante a simulação de digitação
+				element._dateFormats = formats;
+				
+				console.log(`Formatos de data preparados para testes: ${formats.join(', ')}`);
+				return value;
+			}
+		} catch (e) {
+			console.warn(`Erro ao processar data: ${value}`, e);
+		}
+	} else {
+		console.log(`Valor não está no formato ISO esperado: ${value}`);
+	}
+	
+	// Se nada funcionou, retorna o valor original
+	return value;
+}
+
+/**
  * Simulates typing with small delays between keystrokes
  *
  * @param {HTMLElement} element - The element to type into
@@ -1373,31 +1368,119 @@ function fillInputElement(element, value) {
  */
 function simulateTypingWithDelays(element, text) {
 	return new Promise((resolve, reject) => {
-		let i = 0;
+		// Verificar se é um campo de data com formatos alternativos
+		if (element.type === "date" && element._dateFormats && element._dateFormats.length > 0) {
+			tryDateFormatsSequentially(element, element._dateFormats, 0, resolve, reject);
+		} else {
+			// Comportamento padrão para outros campos
+			let i = 0;
 
-		function typeNextChar() {
-			if (i >= text.length) {
-				resolve();
-				return;
+			function typeNextChar() {
+				if (i >= text.length) {
+					resolve();
+					return;
+				}
+
+				const char = text[i];
+
+				// Ensure element is focused
+				if (document.activeElement !== element) {
+					element.focus();
+				}
+
+				// Add character to value
+				const currentValue = element.value;
+				element.value = currentValue + char;
+
+				// Trigger comprehensive events for all inputs
+				triggerKeyEvents(element, char);
+
+				// Move to next character after a delay (50ms for all inputs)
+				i++;
+				setTimeout(typeNextChar, 50);
 			}
 
-			const char = text[i];
+			// Start typing
+			typeNextChar();
+		}
+	});
+}
 
-			// Add character to value
-			const currentValue = element.value;
-			element.value = currentValue + char;
+/**
+ * Tenta preencher um campo de data com diferentes formatos sequencialmente,
+ * verificando se o campo foi preenchido corretamente após cada tentativa
+ * 
+ * @param {HTMLElement} element - O elemento de input do tipo date
+ * @param {Array<string>} formats - Array de formatos de data para tentar
+ * @param {number} index - Índice atual no array de formatos
+ * @param {Function} resolve - Função resolve da Promise
+ * @param {Function} reject - Função reject da Promise
+ */
+function tryDateFormatsSequentially(element, formats, index, resolve, reject) {
+	// Se já tentamos todos os formatos, desistimos
+	if (index >= formats.length) {
+		console.warn(`Nenhum formato de data funcionou para o campo ${element.id || element.name || "unnamed"}`);
+		resolve(); // Resolvemos a promise mesmo assim para não bloquear
+		return;
+	}
 
-			// Trigger key events
-			triggerKeyEvents(element, char);
+	const format = formats[index];
+	console.log(`Tentando formato de data ${index + 1}/${formats.length}: ${format}`);
+	
+	// Limpar o campo para a nova tentativa
+	element.value = "";
+	element.focus();
+	
+	// Definir um timeout para verificar se o campo foi preenchido corretamente
+	const checkTimeout = 500; // 500ms para verificar se o formato funcionou
+	
+	// Simular digitação do formato atual
+	let charIndex = 0;
 
-			// Move to next character after a small delay
-			i++;
-			setTimeout(typeNextChar, 10); // 10ms delay between keystrokes
+	function typeNextChar() {
+		if (charIndex >= format.length) {
+			// Terminamos de digitar, aguardar um pouco e verificar se funcionou
+			setTimeout(() => {
+				// Verificar se o campo foi preenchido corretamente
+				if (element.value && element.value.trim() !== "") {
+					console.log(`Formato de data funcionou: ${format}`);
+					
+					// Garantir que o campo perca o foco para disparar validação
+					element.blur();
+					
+					// Formato funcionou, resolver a promise
+					resolve();
+				} else {
+					console.log(`Formato de data não funcionou: ${format}, tentando próximo...`);
+					
+					// Tentar o próximo formato
+					tryDateFormatsSequentially(element, formats, index + 1, resolve, reject);
+				}
+			}, checkTimeout);
+			return;
 		}
 
-		// Start typing
-		typeNextChar();
-	});
+		const char = format[charIndex];
+		
+		// Garantir que o elemento está focado
+		if (document.activeElement !== element) {
+			element.focus();
+		}
+		
+		// Adicionar caractere ao valor
+		const currentValue = element.value;
+		element.value = currentValue + char;
+		
+		// Disparar eventos de teclado para este caractere
+		triggerKeyEvents(element, char);
+		
+		// Avançar para o próximo caractere após um pequeno delay
+		charIndex++;
+		setTimeout(typeNextChar, 50);
+	}
+	
+	// Iniciar a digitação deste formato
+	typeNextChar();
 }
 
 /**
@@ -1454,24 +1537,37 @@ function triggerKeyEvents(element, char) {
 	const keypressEvent = new KeyboardEvent("keypress", eventOptions);
 	element.dispatchEvent(keypressEvent);
 
-	// Create and dispatch input event
+	// Create and dispatch input event with more properties for mask handling
 	try {
 		const inputEvent = new InputEvent("input", {
 			bubbles: true,
 			cancelable: true,
 			inputType: "insertText",
 			data: char,
+			composed: true, // Helps with Shadow DOM
 		});
 		element.dispatchEvent(inputEvent);
 	} catch (e) {
 		// Fallback for browsers that don't support InputEvent constructor
 		const inputEvent = new Event("input", { bubbles: true, cancelable: true });
+
+		// Try to add data property for mask scripts that might need it
+		try {
+			Object.defineProperty(inputEvent, "data", {
+				value: char,
+				enumerable: true,
+			});
+		} catch (propError) {}
+
 		element.dispatchEvent(inputEvent);
 	}
 
 	// Create and dispatch keyup event
 	const keyupEvent = new KeyboardEvent("keyup", eventOptions);
 	element.dispatchEvent(keyupEvent);
+
+	// Also dispatch change event after each character for some masking libraries
+	element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 /**

@@ -3,7 +3,6 @@ import {
 	fillFormWithMappings,
 	fillVirtualFormWithMappings,
 	createVirtualForm,
-	groupInputsByContainer,
 } from "./formUtils";
 import { INPUT_SELECTORS } from "./constants";
 
@@ -14,7 +13,8 @@ export class FormProcessor {
 	constructor(settings) {
 		this.apiKey = settings.apiKey;
 		this.contextData = settings.contextData;
-		this.customFields = settings.customFields || {};
+		this.structuredData = settings.structuredData || {};
+		this.useStructuredData = settings.useStructuredData === true;
 		this.isEnabled = settings.enabled === true;
 	}
 
@@ -26,7 +26,8 @@ export class FormProcessor {
 	updateSettings(settings) {
 		this.apiKey = settings.apiKey;
 		this.contextData = settings.contextData;
-		this.customFields = settings.customFields || {};
+		this.structuredData = settings.structuredData || this.structuredData;
+		this.useStructuredData = settings.useStructuredData === true;
 		this.isEnabled = settings.enabled === true;
 	}
 
@@ -47,15 +48,49 @@ export class FormProcessor {
 	}
 
 	/**
-	 * Fill standalone inputs (not in forms) with the mapped values
+	 * Process all forms and standalone inputs on the page
 	 *
-	 * @param {Array} fields - Array of field objects to fill
-	 * @returns {Promise<number>} - Number of fields filled
+	 * @returns {Promise<Object>} - Object with counts of processed items
 	 */
-	async fillStandaloneInputs(fields) {
+	async processAllForms() {
 		try {
-			// Find all standalone inputs
-			const { isElementVisible } = await import("./formUtils");
+			if (!this.apiKey || !this.isEnabled) {
+				console.log("QuickFill is disabled or missing API key");
+				return { success: false, forms: 0, standaloneGroups: 0 };
+			}
+
+			console.log("QuickFill: Starting to process all forms on the page");
+
+			// Import necessary utilities
+			const { isElementVisible, groupInputsByContainer } = await import(
+				"./formUtils"
+			);
+
+			// Process regular forms first
+			const allForms = document.querySelectorAll("form");
+			const visibleForms = Array.from(allForms).filter(
+				(form) =>
+					isElementVisible(form) &&
+					form.querySelectorAll(INPUT_SELECTORS.FORM_INPUTS_COMBINED).length >
+						0,
+			);
+
+			console.log(
+				`QuickFill: Found ${visibleForms.length} visible forms on the page`,
+			);
+
+			let processedForms = 0;
+
+			// Process each visible form
+			for (const form of visibleForms) {
+				const result = await this.processForm(form);
+				if (result) {
+					processedForms++;
+					console.log(`QuickFill: Successfully filled form #${processedForms}`);
+				}
+			}
+
+			// Now process standalone inputs (not in forms)
 			const allStandaloneInputs = document.querySelectorAll(
 				INPUT_SELECTORS.STANDALONE_COMBINED,
 			);
@@ -65,118 +100,51 @@ export class FormProcessor {
 				(input) => isElementVisible(input),
 			);
 
-			if (visibleStandaloneInputs.length === 0) {
-				return 0;
-			}
+			let processedGroups = 0;
 
-			// Create a map of inputs by ID, name or label association
-			const inputMap = new Map();
-			const labelMap = new Map();
-			const formIdMap = new Map();
+			if (visibleStandaloneInputs.length > 0) {
+				console.log(
+					`QuickFill: Found ${visibleStandaloneInputs.length} standalone inputs`,
+				);
 
-			visibleStandaloneInputs.forEach((input) => {
-				// Store by ID and name
-				if (input.id) inputMap.set(input.id, input);
-				if (input.name) inputMap.set(input.name, input);
+				// Group inputs by container
+				const inputGroups = groupInputsByContainer(visibleStandaloneInputs);
+				console.log(
+					`QuickFill: Grouped into ${inputGroups.length} logical sections`,
+				);
 
-				// Store by associated label text
-				if (input.id) {
-					const label = document.querySelector(`label[for="${input.id}"]`);
-					if (label && label.textContent) {
-						const labelText = label.textContent.trim();
-						labelMap.set(labelText.toLowerCase(), input);
+				// Process each group as a virtual form
+				for (const group of inputGroups) {
+					if (group.inputs.length === 0) continue;
+
+					// Process the virtual form
+					const result = await this.processForm(
+						createVirtualForm(group.inputs),
+						true,
+					);
+					if (result) {
+						processedGroups++;
+						console.log(
+							`QuickFill: Successfully filled standalone group #${processedGroups}`,
+						);
 					}
 				}
-
-				// Store by form ID association
-				const closestForm = input.closest("form");
-				if (closestForm && closestForm.id) {
-					formIdMap.set(closestForm.id, input);
-				}
-			});
-
-			// Find inputs that match the fields to fill
-			const matchedInputs = [];
-			fields.forEach((field) => {
-				// Try to match by ID first
-				let input = inputMap.get(field.id);
-
-				// If no match by ID, try by label
-				if (!input && field.label) {
-					input = labelMap.get(field.label.toLowerCase());
-				}
-
-				// If still no match, try by formId
-				if (!input && field.formId && !field.formId.startsWith("virtual-")) {
-					input = formIdMap.get(field.formId);
-				}
-
-				if (input) {
-					matchedInputs.push({
-						input,
-						value: field.value,
-					});
-				}
-			});
-
-			if (matchedInputs.length === 0) {
-				return 0;
 			}
 
-			// Group inputs by container
-			const inputGroups = groupInputsByContainer(
-				matchedInputs.map((m) => m.input),
-			);
-			let filledGroups = 0;
-
-			// Process each group of inputs
-			for (const group of inputGroups) {
-				if (group.inputs.length === 0) continue;
-
-				// Create a virtual form for these inputs
-				const virtualForm = createVirtualForm(group.inputs);
-
-				// Map the matched inputs to the virtual form format
-				const virtualFormMappings = matchedInputs
-					.filter((match) => group.inputs.includes(match.input))
-					.map((match) => ({
-						htmlElementId: match.input.id || match.input.name,
-						value: match.value,
-					}));
-
-				// Fill the virtual form
-				const filledCount = fillVirtualFormWithMappings(
-					virtualForm,
-					virtualFormMappings,
-				);
-				if (filledCount > 0) filledGroups++;
-			}
-
-			return filledGroups;
+			return {
+				success: processedForms > 0 || processedGroups > 0,
+				forms: processedForms,
+				standaloneGroups: processedGroups,
+			};
 		} catch (error) {
-			console.error("Error filling standalone inputs:", error);
-			return 0;
+			console.error("Error processing all forms:", error);
+			return {
+				success: false,
+				forms: 0,
+				standaloneGroups: 0,
+				error: error.message,
+			};
 		}
-	}
-
-	/**
-	 * Build hints for form fields from custom field data
-	 *
-	 * @returns {string} - Formatted field hints
-	 */
-	buildFieldHints() {
-		// If we have custom field data, include it as hints
-		if (!this.customFields || Object.keys(this.customFields).length === 0) {
-			return "";
-		}
-
-		// Format the custom fields as hints
-		const hints = [];
-		for (const [fieldName, fieldValue] of Object.entries(this.customFields)) {
-			hints.push(`${fieldName}: ${fieldValue}`);
-		}
-
-		return hints.join("\n");
 	}
 
 	/**
@@ -213,7 +181,8 @@ export class FormProcessor {
 				apiKey: this.apiKey,
 				formElements: extractedFields,
 				userConversation: contextToUse,
-				formFieldHints: this.buildFieldHints(),
+				structuredData: this.structuredData,
+				useStructuredData: this.useStructuredData,
 			});
 
 			// Fill the form with the mappings

@@ -1,7 +1,7 @@
 import { FormProcessor } from "./utils/formProcessor";
 import { collectFormData } from "./utils/formUtils";
 import { DOMObserver, addStyles } from "./utils/domObserver";
-import { DEFAULT_SETTINGS, INPUT_SELECTORS } from "./utils/constants";
+import { DEFAULT_SETTINGS, INPUT_SELECTORS, ACTIONS } from "./utils/constants";
 
 /**
  * QuickFill Content Script
@@ -71,7 +71,8 @@ function setupDynamicFormObserver() {
  */
 function setupMessageListener() {
 	chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-		if (message.action === "fillForms") {
+		// Use message action constants instead of string literals
+		if (message.action === ACTIONS.FILL_FORMS) {
 			// Inicializa array de logs se o logToPopup estiver habilitado
 			const logs = message.logToPopup ? [] : null;
 
@@ -83,8 +84,9 @@ function setupMessageListener() {
 			}
 
 			// Adiciona listener para capturar logs de console se logToPopup estiver habilitado
+			let originalConsoleLog = null;
 			if (message.logToPopup) {
-				const originalConsoleLog = console.log;
+				originalConsoleLog = console.log;
 				console.log = function () {
 					// Captura o log original
 					originalConsoleLog.apply(console, arguments);
@@ -123,127 +125,85 @@ function setupMessageListener() {
 						});
 					}
 				};
+			}
 
-				// Restaura o console.log após a operação
-				setTimeout(() => {
-					console.log = originalConsoleLog;
-				}, 10000); // Timeout de segurança caso algo dê errado
+			// Processa todos os formulários na página
+			if (formProcessor) {
+				Promise.resolve().then(async () => {
+					try {
+						const result = await formProcessor.processAllForms();
+
+						// Restaura o console.log original se necessário
+						if (message.logToPopup && originalConsoleLog) {
+							console.log = originalConsoleLog;
+						}
+
+						sendResponse({
+							success: true,
+							logs: logs || [],
+							message: "Forms processed successfully",
+							forms: result.forms,
+							standaloneGroups: result.standaloneGroups,
+						});
+					} catch (error) {
+						console.error("Error processing forms:", error);
+
+						// Restaura o console.log original se necessário
+						if (message.logToPopup && originalConsoleLog) {
+							console.log = originalConsoleLog;
+						}
+
+						sendResponse({
+							success: false,
+							logs: logs || [],
+							error: error.message || "Error processing forms",
+						});
+					}
+				});
+			} else {
+				sendResponse({
+					success: false,
+					logs: logs || [],
+					error: "Form processor not initialized",
+				});
 			}
 
 			return true; // Indica resposta assíncrona
 		}
 
-		if (message.action === "updateSettings") {
+		if (message.action === ACTIONS.UPDATE_SETTINGS) {
 			if (formProcessor) {
 				formProcessor.updateSettings(message.settings);
+
+				// If model selection changed, update the AI model
+				if (message.settings.selectedModel) {
+					import("./utils/gptProcessor.js").then(({ setModel }) => {
+						setModel(message.settings.selectedModel);
+						console.log("Updated AI model to:", message.settings.selectedModel);
+					});
+				}
 			} else {
 				formProcessor = new FormProcessor(message.settings);
 			}
 			sendResponse({ success: true });
-		} else if (message.action === "getFormData") {
+		} else if (message.action === ACTIONS.GET_FORM_DATA) {
 			const formData = collectFormData();
 			sendResponse({ formData });
-		} else if (message.action === "processForm") {
-			// Processa um formulário específico com os dados fornecidos
-			handleProcessFormRequest(message, sendResponse);
-			return true; // Indica resposta assíncrona
+		} else if (message.action === ACTIONS.CLEAR_CACHE) {
+			import("./utils/gptProcessor.js").then(({ clearCache }) => {
+				clearCache();
+				console.log("Cache cleared");
+				sendResponse({ success: true });
+			});
+			return true;
+		} else if (message.action === ACTIONS.GET_CACHE_STATS) {
+			import("./utils/gptProcessor.js").then(({ getCacheStats }) => {
+				const stats = getCacheStats();
+				console.log("Cache stats:", stats);
+				sendResponse({ success: true, stats });
+			});
+			return true;
 		}
 		return true; // Indica resposta assíncrona
 	});
-}
-
-/**
- * Manipula requisição para processar um formulário específico
- *
- * @param {Object} message - Mensagem com dados da requisição
- * @param {Function} sendResponse - Função de callback para resposta
- */
-async function handleProcessFormRequest(message, sendResponse) {
-	const { formId, formData, useCustomContext } = message;
-
-	try {
-		// Importa a função de verificação de visibilidade
-		const { isElementVisible, groupInputsByContainer, createVirtualForm } =
-			await import("./utils/formUtils");
-
-		// Encontra o formulário pelo ID
-		let formElement = null;
-		let isVirtual = false;
-
-		if (formId?.startsWith("standalone-group-")) {
-			// Este é um grupo de inputs independente
-			// Busca apenas inputs independentes visíveis
-			const allStandaloneInputs = document.querySelectorAll(
-				'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not(form *), select:not(form *), textarea:not(form *)',
-			);
-
-			const visibleStandaloneInputs = Array.from(allStandaloneInputs).filter(
-				(input) => isElementVisible(input),
-			);
-
-			if (!visibleStandaloneInputs.length) {
-				sendResponse({
-					success: false,
-					message: "Nenhum input independente visível encontrado",
-				});
-				return;
-			}
-
-			const inputGroups = groupInputsByContainer(visibleStandaloneInputs);
-			const groupIndex = Number.parseInt(
-				formId.replace("standalone-group-", ""),
-			);
-
-			if (inputGroups[groupIndex]) {
-				// Cria um formulário virtual para este grupo
-				formElement = createVirtualForm(inputGroups[groupIndex].inputs);
-				isVirtual = true;
-			}
-		} else {
-			// Formulário regular
-			formElement =
-				document.getElementById(formId) ||
-				document.querySelector(`form[action="${formId}"]`) ||
-				document.forms[Number.parseInt(formId)] ||
-				null;
-
-			// Verifica se o formulário está visível
-			if (formElement && !isElementVisible(formElement)) {
-				sendResponse({
-					success: false,
-					message: `Formulário com ID ${formId} não está visível na tela`,
-				});
-				return;
-			}
-		}
-
-		if (!formElement) {
-			sendResponse({
-				success: false,
-				message: `Formulário com ID ${formId} não encontrado`,
-			});
-			return;
-		}
-
-		// Processa o formulário com GPT
-		// Se estamos usando contexto personalizado, passamos como um parâmetro
-		const result = await formProcessor.processForm(
-			formElement,
-			isVirtual,
-			useCustomContext ? formData : null,
-		);
-
-		sendResponse({
-			success: true,
-			filled: result,
-			message: result
-				? "Formulário processado e preenchido com sucesso"
-				: "Formulário processado mas nenhum campo pôde ser preenchido",
-		});
-	} catch (error) {
-		sendResponse({
-			success: false,
-			message: `Erro ao processar formulário: ${error.message}`,
-		});
-	}
 }
