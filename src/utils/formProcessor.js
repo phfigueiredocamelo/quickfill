@@ -68,13 +68,14 @@ export class FormProcessor {
 
 			// Process regular forms first
 			const allForms = document.querySelectorAll("form");
+			console.log("allForms", allForms);
 			const visibleForms = Array.from(allForms).filter(
 				(form) =>
 					isElementVisible(form) &&
 					form.querySelectorAll(INPUT_SELECTORS.FORM_INPUTS_COMBINED).length >
 						0,
 			);
-
+			console.log("visibleForms", visibleForms);
 			console.log(
 				`QuickFill: Found ${visibleForms.length} visible forms on the page`,
 			);

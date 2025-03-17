@@ -239,7 +239,7 @@ async function processHTMLWithGPT({ apiKey, html, url }) {
 	try {
 		// Clean the HTML to reduce token usage
 		const cleanedHTML = cleanHTML(html);
-
+		console.log("Cleaned HTML for processing:", cleanedHTML);
 		// Generate cache key
 		const cacheKey = createCacheKey(url, cleanedHTML);
 		console.log("Form structure cache key:", cacheKey);
