@@ -15,8 +15,6 @@ let currentElements: FormElement[] = [];
  * Initialize the content script
  */
 const initialize = (): void => {
-	console.log("QuickFill V2: Content script initialized");
-
 	// Set up message listener for communication with background script
 	chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		switch (message.action) {
@@ -45,7 +43,6 @@ const handleGetFormData = (sendResponse: (response: any) => void): void => {
 	try {
 		// Index all input elements on the page
 		currentElements = indexAllInputs();
-		console.log("currentElements", currentElements);
 		// Send success response with elements
 		sendResponse({
 			success: true,
@@ -70,7 +67,6 @@ const handleFillForms = (
 	mappings: GPTResponse["mappings"],
 	sendResponse: (response: any) => void,
 ): void => {
-	console.log("mappings", mappings);
 	try {
 		if (!mappings || !Array.isArray(mappings)) {
 			throw new Error("Invalid mappings data");
@@ -92,7 +88,6 @@ const handleFillForms = (
 				results.failed++;
 			}
 		});
-		console.log("filled fields", results);
 		// Show notification with results
 		if (results.successful > 0) {
 			showNotification(

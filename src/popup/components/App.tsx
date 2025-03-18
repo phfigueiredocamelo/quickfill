@@ -94,15 +94,15 @@ const App: React.FC = () => {
 			});
 
 			if (!tab || !tab.id) {
-				throw new Error("No active tab found. Please make sure you're on a web page.");
+				throw new Error(
+					"No active tab found. Please make sure you're on a web page.",
+				);
 			}
-
-			console.log("Active tab found:", tab.id, tab.url);
 
 			// This is the ONLY place where we should be sending FILL_FORMS action
 			const response = await chrome.runtime.sendMessage({
 				action: ACTIONS.FILL_FORMS,
-				tabId: tab.id // Explicitly pass the tab ID to background script
+				tabId: tab.id, // Explicitly pass the tab ID to background script
 			});
 
 			if (!response.success) {

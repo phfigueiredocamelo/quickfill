@@ -37,6 +37,11 @@ Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulár
 ## Updates
 - 18/03/2025: Iniciada a implementação do zero com estrutura TypeScript, criando a hierarquia básica de arquivos e componentes principais.
 - 18/03/2025: Melhorada a função indexAllInputs para detectar campos dentro de forms e extrair todos os atributos em uma string concatenada para melhor contexto ao GPT. Também foi adicionada a detecção e inclusão do formId para melhorar a precisão de preenchimento.
+- 18/03/2025: Corrigido problema no LogPanel que impedia a exibição dos logs. Resolvido o erro nas funções handleGetLogs e handleClearLogs no background script, que estavam usando a chave literal "logs" ao invés da constante STORAGE_KEYS.LOGS definida na aplicação.
+- 18/03/2025: Refatorado o código de gerenciamento de logs no background script para usar as funções utilitárias importadas de storageUtils em vez de acessar diretamente o chrome.storage. Isso melhora a consistência e manutenibilidade do código.
+- 18/03/2025: Adicionados logs de depuração para acompanhar todo o fluxo de preenchimento de formulários. Agora registra detalhes dos inputs detectados, contexto completo enviado para o GPT e resposta completa do modelo, facilitando o diagnóstico de problemas no mapeamento de campos.
+- 18/03/2025: Aprimorado o LogPanel para exibir corretamente os logs de debug_input_data e debug_gpt_process, permitindo uma visão mais detalhada do processo de coleta de campos e da resposta do GPT na interface do usuário.
+- 18/03/2025: Adicionadas visualizações detalhadas para debug no LogPanel, com opções expansíveis para mostrar o conteúdo completo dos elementos detectados, contexto enviado ao GPT e resposta recebida, facilitando a depuração e análise do processo de preenchimento.
 
 ## Comandos Úteis
 - Desenvolvimento: `npm run dev`

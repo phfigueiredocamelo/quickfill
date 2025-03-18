@@ -10,6 +10,8 @@ import {
 	saveSettings,
 	getContextData,
 	addLogEntry,
+	clearLogs,
+	getLogs,
 } from "../utils/storageUtils";
 import { processFormWithGPT } from "../utils/gptUtils";
 
@@ -17,8 +19,6 @@ import { processFormWithGPT } from "../utils/gptUtils";
  * Initialize the background script
  */
 const initialize = (): void => {
-	console.log("QuickFill V2: Background script initialized");
-
 	// Set up message listener for communication with popup and content scripts
 	chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 		// Handle messages based on action
@@ -29,7 +29,7 @@ const initialize = (): void => {
 
 			case ACTIONS.FILL_FORMS:
 				// ONLY handle fill forms when explicitly requested
-				handleFillForms(message.tabId || sender.tab?.id, sendResponse);
+				handleFillForms(sendResponse);
 				break;
 
 			case ACTIONS.CLEAR_CONTEXT:
@@ -94,24 +94,20 @@ const handleUpdateSettings = async (
  * @param sendResponse Function to send response back
  */
 const handleFillForms = async (
-	tabId: number | undefined,
 	sendResponse: (response: any) => void,
 ): Promise<void> => {
+	let tabId: number;
 	try {
-		// If no tabId provided, try to get the active tab
-		if (!tabId) {
-			const tabs = await chrome.tabs.query({
-				active: true,
-				currentWindow: true,
-			});
-			if (tabs && tabs.length > 0 && tabs[0].id) {
-				tabId = tabs[0].id;
-				console.log("Found active tab:", tabId);
-			} else {
-				throw new Error(
-					"No active tab found. Please make sure you're on a web page.",
-				);
-			}
+		const tabs = await chrome.tabs.query({
+			active: true,
+			currentWindow: true,
+		});
+		if (tabs && tabs.length > 0 && tabs[0].id) {
+			tabId = tabs[0].id;
+		} else {
+			throw new Error(
+				"No active tab found. Please make sure you're on a web page.",
+			);
 		}
 
 		// Get current settings
@@ -127,7 +123,7 @@ const handleFillForms = async (
 
 		// Get form data from content script
 		const formData = await requestFormData(tabId);
-		console.log("formData", formData);
+
 		if (
 			!formData.success ||
 			!formData.elements ||
@@ -135,6 +131,17 @@ const handleFillForms = async (
 		) {
 			throw new Error("No form elements found on the page");
 		}
+
+		// Log the extracted form elements
+		await addLogEntry({
+			action: "debug_input_data",
+			details: `Found ${formData.elements.length} form elements on ${formData.url}`,
+			success: true,
+			data: {
+				elements: formData.elements,
+				url: formData.url,
+			},
+		});
 
 		// Get user context data
 		const contextData = await getContextData();
@@ -149,7 +156,18 @@ const handleFillForms = async (
 			contextData,
 			settings,
 		);
-		console.log("GPT response", response);
+
+		// Log the GPT processing
+		await addLogEntry({
+			action: "debug_gpt_process",
+			details: `GPT model ${settings.selectedModel} processed form data`,
+			success: response.success,
+			data: {
+				contextBuilt: contextData,
+				gptResponse: response,
+			},
+		});
+
 		if (!response.success || response.mappings.length === 0) {
 			throw new Error("No fields could be filled");
 		}
@@ -302,8 +320,8 @@ const handleClearLogs = async (
 	sendResponse: (response: any) => void,
 ): Promise<void> => {
 	try {
-		// Clear logs from storage
-		await chrome.storage.local.set({ logs: [] });
+		// Clear logs from storage using the utility function
+		await clearLogs();
 
 		sendResponse({ success: true });
 	} catch (error) {
@@ -323,9 +341,8 @@ const handleGetLogs = async (
 	sendResponse: (response: any) => void,
 ): Promise<void> => {
 	try {
-		// Get logs from storage
-		const result = await chrome.storage.local.get("logs");
-		const logs: LogEntry[] = result.logs || [];
+		// Get logs from storage using the utility function
+		const logs = await getLogs();
 
 		sendResponse({ success: true, logs });
 	} catch (error) {

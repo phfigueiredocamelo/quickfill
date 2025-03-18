@@ -19,11 +19,9 @@ export const indexAllInputs = (): FormElement[] => {
 	// Get all input elements matching our selectors
 	const selectorString = INPUT_SELECTORS.join(", ");
 	const elements = Array.from(document.querySelectorAll(selectorString));
-	console.log("elements", elements);
 	// Also get inputs within forms
 	const forms = Array.from(document.querySelectorAll("form"));
 	const formInputsMap = new Map<Element, string>();
-	console.log("forms", forms);
 	// Process form elements and track form IDs
 	// biome-ignore lint/complexity/noForEach: <explanation>
 	forms.forEach((form) => {

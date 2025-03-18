@@ -26,19 +26,16 @@ export const processFormWithGPT = async (
 				error: "API key is not set",
 			};
 		}
-		console.log("elements", elements, "context", context, "settings", settings);
 		// Create the prompt for GPT
 		const prompt = createGPTPrompt(elements, context);
-		console.log("prompt", prompt);
 		// Call the GPT API
 		const response = await callGPTAPI(prompt, apiKey, settings.selectedModel);
-		console.log("response", response);
 		// Parse the response to get field mappings
 		const mappings = parseGPTResponse(response, elements);
-		console.log("mappings", mappings);
 		return {
 			success: true,
 			mappings,
+			rawResponse: response,
 		};
 	} catch (error) {
 		console.error("Error processing form with GPT:", error);

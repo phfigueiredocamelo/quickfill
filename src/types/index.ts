@@ -45,4 +45,5 @@ export interface GPTResponse {
     value: string;
   }[];
   error?: string;
+  rawResponse?: string;
 }
