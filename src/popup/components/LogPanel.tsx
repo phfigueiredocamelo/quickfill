@@ -37,6 +37,69 @@ const LogPanel: React.FC<LogPanelProps> = ({
 		}
 	};
 
+	// Function to convert JSON data to readable text format
+	const formatJsonData = (data: any): string => {
+		let jsonObject;
+		
+		// Parse string JSON if needed
+		if (typeof data === 'string' && (data.startsWith('{') || data.startsWith('['))) {
+			try {
+				jsonObject = JSON.parse(data);
+			} catch (e) {
+				return data;
+			}
+		} else {
+			jsonObject = data;
+		}
+		
+		// Convert to readable format
+		if (!jsonObject) return '';
+		
+		// Handle array case
+		if (Array.isArray(jsonObject)) {
+			return jsonObject.map((item, index) => {
+				if (typeof item === 'object') {
+					return `Item ${index + 1}:\n${formatObjectToReadableText(item)}`;
+				}
+				return `Item ${index + 1}: ${item}`;
+			}).join('\n\n');
+		}
+		
+		// Handle object case
+		return formatObjectToReadableText(jsonObject);
+	};
+	
+	// Helper function to format object to readable text
+	const formatObjectToReadableText = (obj: any, depth: number = 0): string => {
+		if (!obj || typeof obj !== 'object') return String(obj);
+		
+		const indent = '  '.repeat(depth);
+		const entries = Object.entries(obj);
+		
+		return entries.map(([key, value]) => {
+			const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+			
+			if (value === null || value === undefined) {
+				return `${indent}${formattedKey}: -`;
+			}
+			
+			if (typeof value === 'object') {
+				if (Array.isArray(value)) {
+					if (value.length === 0) return `${indent}${formattedKey}: Empty list`;
+					if (typeof value[0] !== 'object') {
+						return `${indent}${formattedKey}: ${value.join(', ')}`;
+					}
+					return `${indent}${formattedKey}:\n${value.map((item, i) => 
+						`${indent}  Item ${i + 1}:\n${formatObjectToReadableText(item, depth + 2)}`
+					).join('\n')}`;
+				}
+				return `${indent}${formattedKey}:\n${formatObjectToReadableText(value, depth + 1)}`;
+			}
+			
+			return `${indent}${formattedKey}: ${value}`;
+		}).join('\n');
+	};
+
 	return (
 		<div className="log-panel">
 			<h2>Activity Logs</h2>
@@ -80,7 +143,7 @@ const LogPanel: React.FC<LogPanelProps> = ({
 											<details>
 												<summary>Ver elementos</summary>
 												<pre className="code-block">
-													{JSON.stringify(log.data.elements, null, 2)}
+													{formatJsonData(log.data.elements)}
 												</pre>
 											</details>
 										</div>
@@ -91,13 +154,15 @@ const LogPanel: React.FC<LogPanelProps> = ({
 											<details>
 												<summary>Ver contexto</summary>
 												<pre className="code-block">
-													{log.data.contextBuilt}
+													{typeof log.data.contextBuilt === 'string' && log.data.contextBuilt.startsWith('{')
+														? formatJsonData(log.data.contextBuilt)
+														: log.data.contextBuilt}
 												</pre>
 											</details>
 											<details>
 												<summary>Ver resposta do GPT</summary>
 												<pre className="code-block">
-													{JSON.stringify(log.data.gptResponse, null, 2)}
+													{formatJsonData(log.data.gptResponse)}
 												</pre>
 											</details>
 										</div>

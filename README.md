@@ -42,6 +42,7 @@ Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulár
 - 18/03/2025: Adicionados logs de depuração para acompanhar todo o fluxo de preenchimento de formulários. Agora registra detalhes dos inputs detectados, contexto completo enviado para o GPT e resposta completa do modelo, facilitando o diagnóstico de problemas no mapeamento de campos.
 - 18/03/2025: Aprimorado o LogPanel para exibir corretamente os logs de debug_input_data e debug_gpt_process, permitindo uma visão mais detalhada do processo de coleta de campos e da resposta do GPT na interface do usuário.
 - 18/03/2025: Adicionadas visualizações detalhadas para debug no LogPanel, com opções expansíveis para mostrar o conteúdo completo dos elementos detectados, contexto enviado ao GPT e resposta recebida, facilitando a depuração e análise do processo de preenchimento.
+- 18/03/2025 15:35: Melhorada a exibição de logs JSON no LogPanel, convertendo estruturas JSON em texto legível com chaves e valores formatados para facilitar a leitura e análise dos dados. Adicionada função formatJsonData que transforma objetos JSON em texto humanamente legível, melhorando significativamente a visualização de contextos, elementos e respostas do GPT.
 
 ## Comandos Úteis
 - Desenvolvimento: `npm run dev`

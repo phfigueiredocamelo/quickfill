@@ -1,0 +1,12 @@
+Sempre adicione um change log no formato no final das alterações no readme.:
+
+Objetivo:
+Observações:
+Regras de negócio:
+
+Updates:
+Dia e hora XX mudamos isso e isso e aquilo
+Dia e hora XX mudamos isso e aquilo e aquilo outro
+
+-----
+
