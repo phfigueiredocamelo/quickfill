@@ -1,7 +1,7 @@
-# QuickFill V2 Development Notes
+# ScratchForms Development Notes
 
 ## Objetivo
-Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulários HTML automaticamente usando GPT e dados contextuais. A extensão analisa campos de formulário e suas etiquetas para entender seu propósito, depois os combina com dados apropriados do contexto do usuário.
+Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dados contextuais. A extensão analisa campos de formulário e suas etiquetas para entender seu propósito, depois os combina com dados apropriados do contexto do usuário.
 
 ## Observações
 - Projeto totalmente reescrito em TypeScript

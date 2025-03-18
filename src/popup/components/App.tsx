@@ -25,9 +25,9 @@ const App: React.FC = () => {
 	// Load settings from storage
 	const loadSettings = async () => {
 		try {
-			const result = await chrome.storage.sync.get("quickfill_settings");
-			if (result.quickfill_settings) {
-				setSettings(result.quickfill_settings);
+			const result = await chrome.storage.sync.get("scratchforms_settings");
+			if (result.scratchforms_settings) {
+				setSettings(result.scratchforms_settings);
 			}
 		} catch (err) {
 			setError("Failed to load settings");
@@ -165,7 +165,7 @@ const App: React.FC = () => {
 	return (
 		<div className="app">
 			<header className="header">
-				<h1>QuickFill V2</h1>
+				<h1>ScratchForms</h1>
 				<div className="tabs">
 					<button
 						className={activeTab === "settings" ? "active" : ""}
@@ -236,7 +236,7 @@ const App: React.FC = () => {
 						{isLoading ? "Processing..." : "Fill Forms"}
 					</button>
 				</div>
-				<p>QuickFill V2 © 2025</p>
+				<p>ScratchForms © 2025</p>
 			</footer>
 		</div>
 	);

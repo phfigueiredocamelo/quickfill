@@ -1,5 +1,5 @@
 /**
- * Constants for QuickFill V2
+ * Constants for ScratchForms
  */
 
 import { GPTModel } from "../types";
@@ -16,9 +16,9 @@ export const ACTIONS = {
 
 // Storage keys
 export const STORAGE_KEYS = {
-	SETTINGS: "quickfill_settings",
-	LOGS: "quickfill_logs",
-	CONTEXT_DATA: "quickfill_context",
+	SETTINGS: "scratchforms_settings",
+	LOGS: "scratchforms_logs",
+	CONTEXT_DATA: "scratchforms_context",
 };
 
 // Input field selectors

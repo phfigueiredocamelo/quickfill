@@ -1,5 +1,5 @@
 {
-  "name": "quickfill-v2",
+  "name": "scratchforms",
   "version": "1.0.0",
   "description": "Chrome extension for auto-filling forms using GPT",
   "main": "index.html",
