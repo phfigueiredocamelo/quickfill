@@ -6,7 +6,7 @@ Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulár
 ## Observações
 - Projeto totalmente reescrito em TypeScript
 - Implementação do zero sem depender do código anterior
-- Salva o contexto do usuário em múltiplos formatos: PDF, JSON, TXT, XML e CSV
+- Salva o contexto do usuário em múltiplos formatos: JSON, TXT, XML e CSV
 - Usa índices UUID para identificar campos de formulário para preenchimento
 - Mantém logs detalhados de preenchimento no popup da extensão
 - Preenchimento ocorre apenas através do botão "Fill Forms", nunca automaticamente
@@ -16,7 +16,7 @@ Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulár
 ## Regras de negócio
 1. Implementação completa em TypeScript
 2. Preenchimento automático de formulários usando GPT e dados contextuais
-3. Suporte a múltiplos formatos para contexto: PDF, JSON, TXT, XML e CSV
+3. Suporte a múltiplos formatos para contexto: JSON, TXT, XML e CSV
 4. Indexação de todos os inputs para facilitar o preenchimento (apenas idx é obrigatório)
 5. Processamento limpo de dados enviados ao modelo (apenas type, name, id, placeholder, label, formId se disponíveis)
 6. Preenchimento de campos usando índices de referência
@@ -43,6 +43,7 @@ Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulár
 - 18/03/2025: Aprimorado o LogPanel para exibir corretamente os logs de debug_input_data e debug_gpt_process, permitindo uma visão mais detalhada do processo de coleta de campos e da resposta do GPT na interface do usuário.
 - 18/03/2025: Adicionadas visualizações detalhadas para debug no LogPanel, com opções expansíveis para mostrar o conteúdo completo dos elementos detectados, contexto enviado ao GPT e resposta recebida, facilitando a depuração e análise do processo de preenchimento.
 - 18/03/2025 15:35: Melhorada a exibição de logs JSON no LogPanel, convertendo estruturas JSON em texto legível com chaves e valores formatados para facilitar a leitura e análise dos dados. Adicionada função formatJsonData que transforma objetos JSON em texto humanamente legível, melhorando significativamente a visualização de contextos, elementos e respostas do GPT.
+- 18/03/2025 17:20: Removido o suporte ao formato PDF para simplificar o sistema e reduzir complexidade. Contextos agora são suportados apenas nos formatos JSON, TXT, XML e CSV.
 
 ## Comandos Úteis
 - Desenvolvimento: `npm run dev`

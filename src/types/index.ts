@@ -1,7 +1,7 @@
 // Basic types for QuickFill V2
 
 // Format options for saving context
-export type ContextFormat = 'json' | 'txt' | 'csv' | 'xml' | 'pdf';
+export type ContextFormat = 'json' | 'txt' | 'csv' | 'xml';
 
 // GPT model options
 export type GPTModel = 'gpt-3.5-turbo' | 'gpt-4-turbo' | 'gpt-4o';

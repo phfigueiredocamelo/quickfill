@@ -37,7 +37,6 @@ export const DEFAULT_SETTINGS = {
 		txt: "",
 		csv: "",
 		xml: "",
-		pdf: "",
 	},
 	selectedFormat: "json" as const,
 	selectedModel: "gpt-3.5-turbo" as GPTModel,
