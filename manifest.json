@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "QuickFill",
+  "name": "QuickFill V2",
   "description": "Automatically fills forms using GPT and saved context data",
   "version": "1.0.0",
   "permissions": [
@@ -12,7 +12,7 @@
     "<all_urls>"
   ],
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "popup/index.html",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
@@ -25,7 +25,7 @@
     "128": "icon128.png"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background/index.js"
   },
   "content_scripts": [
     {
