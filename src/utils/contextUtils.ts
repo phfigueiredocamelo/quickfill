@@ -56,7 +56,6 @@ export const parseContextData = (
     case 'xml':
       return parseXML(data);
     case 'txt':
-    case 'pdf':
       // For text formats, we'll create a simple object with the content
       return { content: data };
     default:
@@ -82,7 +81,6 @@ export const formatContextData = (
     case 'xml':
       return formatXML(data);
     case 'txt':
-    case 'pdf':
       // For text formats, we'll create a simple representation
       return formatPlainText(data);
     default:

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "QuickFill V2",
+  "name": "ScratchForms",
   "description": "Automatically fills forms using GPT and saved context data",
   "version": "1.0.0",
   "permissions": [
@@ -34,5 +34,8 @@
       "js": ["content.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'unsafe-eval'; object-src 'self'"
+  }
 }

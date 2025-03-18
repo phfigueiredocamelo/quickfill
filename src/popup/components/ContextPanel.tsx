@@ -18,7 +18,7 @@ const ContextPanel: React.FC<ContextPanelProps> = ({
   onClearContext,
   isLoading
 }) => {
-  const formatOptions: ContextFormat[] = ['json', 'txt', 'csv', 'xml', 'pdf'];
+  const formatOptions: ContextFormat[] = ['json', 'txt', 'csv', 'xml'];
   
   return (
     <div className="context-panel">

@@ -9,7 +9,34 @@ import { INPUT_SELECTORS, FILLED_FIELD_STYLE } from "./constants";
 const elementMap = new Map<string, HTMLElement>();
 
 /**
- * Indexes all input elements on the page with UUIDs
+ * Finds all elements that match a selector, ignoring aria-hidden status
+ * @param selector CSS selector to match
+ * @param root Root element to start search from
+ * @returns Array of matching elements
+ */
+const findAllElements = (selector: string, root: Element | Document = document): Element[] => {
+	// First, get elements matched by regular selector
+	const directMatches = Array.from(root.querySelectorAll(selector));
+	
+	// Get all elements in the document (including hidden ones)
+	const allElements = Array.from(root.querySelectorAll('*'));
+	
+	// Filter to just the ones that match our selector via matches()
+	// This will include elements hidden by aria-hidden
+	const allMatches = allElements.filter(el => {
+		try {
+			return el.matches(selector);
+		} catch (e) {
+			return false;
+		}
+	});
+	
+	// Remove duplicates by creating a Set
+	return [...new Set([...directMatches, ...allMatches])];
+};
+
+/**
+ * Indexes all input elements on the page with UUIDs, including hidden elements
  * @returns Array of elements with UUID indexes and attributes string
  */
 export const indexAllInputs = (): FormElement[] => {
@@ -18,15 +45,37 @@ export const indexAllInputs = (): FormElement[] => {
 
 	// Get all input elements matching our selectors
 	const selectorString = INPUT_SELECTORS.join(", ");
-	const elements = Array.from(document.querySelectorAll(selectorString));
+	
+	// Find all interactive elements, even those in aria-hidden containers or with pointer-events: none
+	const elements = findAllElements(selectorString);
+	
+	// Special case for dialogs and modals - ensure we always check them
+	const modalElements = findAllElements('[role="dialog"], .modal, .dialog, [aria-modal="true"]');
+	const modalInputs: Element[] = [];
+	
+	// Find inputs within modals
+	modalElements.forEach(modal => {
+		INPUT_SELECTORS.forEach(selector => {
+			const inputs = findAllElements(selector, modal);
+			modalInputs.push(...inputs);
+		});
+	});
+	
 	// Also get inputs within forms
-	const forms = Array.from(document.querySelectorAll("form"));
+	const forms = findAllElements("form");
 	const formInputsMap = new Map<Element, string>();
+	
 	// Process form elements and track form IDs
 	// biome-ignore lint/complexity/noForEach: <explanation>
 	forms.forEach((form) => {
 		const formId = form.id || `form-${crypto.randomUUID().slice(0, 8)}`;
-		const formInputs = Array.from(form.querySelectorAll(selectorString));
+		
+		// Find inputs in this form
+		const formInputs: Element[] = [];
+		INPUT_SELECTORS.forEach(selector => {
+			const inputs = findAllElements(selector, form);
+			formInputs.push(...inputs);
+		});
 
 		// biome-ignore lint/complexity/noForEach: <explanation>
 		formInputs.forEach((input) => {
@@ -34,8 +83,8 @@ export const indexAllInputs = (): FormElement[] => {
 		});
 	});
 
-	// Combine all elements (regular and within forms)
-	const allElements = [...elements];
+	// Combine all elements (deduplicate with Set)
+	const allElements = [...new Set([...elements, ...modalInputs])];
 
 	return allElements.map((element) => {
 		// Generate a UUID for this element
@@ -70,6 +119,12 @@ export const indexAllInputs = (): FormElement[] => {
 			const formId =
 				parentForm?.id || `form-${crypto.randomUUID().slice(0, 8)}`;
 			attributesString += `formId="${formId}" `;
+		}
+
+		// Add info about modal/dialog container if present
+		const dialogParent = el.closest('[role="dialog"], .modal, .dialog, [aria-modal="true"]');
+		if (dialogParent) {
+			attributesString += `inDialog="true" `;
 		}
 
 		// Create a FormElement with UUID and attributes string
@@ -123,6 +178,20 @@ export const fillInputByIdx = (idx: string, value: string): boolean => {
 	}
 
 	try {
+		// Check if element is in a dialog with pointer-events restrictions
+		const dialogParent = element.closest('[role="dialog"]');
+		if (dialogParent) {
+			// Force pointer-events auto temporarily if needed
+			const originalStyle = dialogParent.getAttribute('style') || '';
+			if (originalStyle.includes('pointer-events: none')) {
+				dialogParent.setAttribute('style', originalStyle.replace('pointer-events: none', 'pointer-events: auto'));
+				// Restore after filling
+				setTimeout(() => {
+					dialogParent.setAttribute('style', originalStyle);
+				}, 100);
+			}
+		}
+		
 		if (element.tagName === "SELECT") {
 			// Handle select elements
 			const selectElement = element as HTMLSelectElement;
