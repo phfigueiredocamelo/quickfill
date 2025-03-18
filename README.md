@@ -10,6 +10,8 @@ Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulár
 - Usa índices UUID para identificar campos de formulário para preenchimento
 - Mantém logs detalhados de preenchimento no popup da extensão
 - Preenchimento ocorre apenas através do botão "Fill Forms", nunca automaticamente
+- Melhoria na detecção de campos dentro de formulários
+- Captura todos os atributos relevantes de campos incluindo labels e formId
 
 ## Regras de negócio
 1. Implementação completa em TypeScript
@@ -23,6 +25,7 @@ Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulár
 9. Salvamento automático de configurações
 10. Funcionalidades para limpar contexto e logs
 11. Uso de formId para melhorar a precisão de preenchimento
+12. Captura todos os atributos dos elementos em uma string concatenada para melhor contexto ao GPT
 
 ## Estrutura do Projeto
 - `/src/v2/types`: Definições de tipos TypeScript
@@ -33,6 +36,7 @@ Criar uma nova versão do QuickFill, uma extensão Chrome que preenche formulár
 
 ## Updates
 - 18/03/2025: Iniciada a implementação do zero com estrutura TypeScript, criando a hierarquia básica de arquivos e componentes principais.
+- 18/03/2025: Melhorada a função indexAllInputs para detectar campos dentro de forms e extrair todos os atributos em uma string concatenada para melhor contexto ao GPT. Também foi adicionada a detecção e inclusão do formId para melhorar a precisão de preenchimento.
 
 ## Comandos Úteis
 - Desenvolvimento: `npm run dev`

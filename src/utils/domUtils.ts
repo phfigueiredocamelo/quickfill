@@ -2,36 +2,111 @@
  * DOM Utility functions for QuickFill V2
  */
 
-import { FormElement } from '../types';
-import { INPUT_SELECTORS, FILLED_FIELD_STYLE } from './constants';
+import { FormElement } from "../types";
+import { INPUT_SELECTORS, FILLED_FIELD_STYLE } from "./constants";
 
 // Internal map to keep track of elements by UUID
 const elementMap = new Map<string, HTMLElement>();
 
 /**
  * Indexes all input elements on the page with UUIDs
- * @returns Array of elements with UUID indexes only
+ * @returns Array of elements with UUID indexes and attributes string
  */
 export const indexAllInputs = (): FormElement[] => {
-  // Clear previous element map
-  elementMap.clear();
-  
-  // Get all input elements matching our selectors
-  const selectorString = INPUT_SELECTORS.join(', ');
-  const elements = Array.from(document.querySelectorAll(selectorString));
-  
-  return elements.map((element) => {
-    // Generate a UUID for this element
-    const uuid = crypto.randomUUID();
-    
-    // Save reference to the element in our map
-    elementMap.set(uuid, element as HTMLElement);
-    
-    // Create a basic object with just the UUID
-    return {
-      idx: uuid
-    };
-  });
+	// Clear previous element map
+	elementMap.clear();
+
+	// Get all input elements matching our selectors
+	const selectorString = INPUT_SELECTORS.join(", ");
+	const elements = Array.from(document.querySelectorAll(selectorString));
+	console.log("elements", elements);
+	// Also get inputs within forms
+	const forms = Array.from(document.querySelectorAll("form"));
+	const formInputsMap = new Map<Element, string>();
+	console.log("forms", forms);
+	// Process form elements and track form IDs
+	// biome-ignore lint/complexity/noForEach: <explanation>
+	forms.forEach((form) => {
+		const formId = form.id || `form-${crypto.randomUUID().slice(0, 8)}`;
+		const formInputs = Array.from(form.querySelectorAll(selectorString));
+
+		// biome-ignore lint/complexity/noForEach: <explanation>
+		formInputs.forEach((input) => {
+			formInputsMap.set(input, formId);
+		});
+	});
+
+	// Combine all elements (regular and within forms)
+	const allElements = [...elements];
+
+	return allElements.map((element) => {
+		// Generate a UUID for this element
+		const uuid = crypto.randomUUID();
+
+		// Save reference to the element in our map
+		elementMap.set(uuid, element as HTMLElement);
+
+		const el = element as HTMLElement;
+
+		// Create attribute string from all element attributes
+		let attributesString = "";
+		for (let i = 0; i < el.attributes.length; i++) {
+			const attr = el.attributes[i];
+			// Skip data attributes and style
+			if (attr.name !== "style") {
+				attributesString += `${attr.name}="${attr.value}" `;
+			}
+		}
+
+		// Add label text if available
+		const labelText = getElementLabel(el);
+		if (labelText) {
+			attributesString += `label="${labelText}" `;
+		}
+
+		// Add form ID if the element is part of a form
+		if (formInputsMap.has(element)) {
+			attributesString += `formId="${formInputsMap.get(element)}" `;
+		} else if (el.closest("form")) {
+			const parentForm = el.closest("form");
+			const formId =
+				parentForm?.id || `form-${crypto.randomUUID().slice(0, 8)}`;
+			attributesString += `formId="${formId}" `;
+		}
+
+		// Create a FormElement with UUID and attributes string
+		return {
+			idx: uuid,
+			otherAttributesMap: attributesString.trim(),
+		};
+	});
+};
+
+/**
+ * Get the label text for an input element
+ * @param element The input element
+ * @returns Label text or empty string
+ */
+const getElementLabel = (element: HTMLElement): string => {
+	// Check for parent label
+	const parentLabel = element.closest("label");
+	if (parentLabel && parentLabel.textContent) {
+		return parentLabel.textContent.trim();
+	}
+
+	// Check for preceding label or span
+	let sibling = element.previousElementSibling;
+	while (sibling) {
+		if (
+			(sibling.tagName === "LABEL" || sibling.tagName === "SPAN") &&
+			sibling.textContent
+		) {
+			return sibling.textContent.trim();
+		}
+		sibling = sibling.previousElementSibling;
+	}
+
+	return "";
 };
 
 /**
@@ -41,49 +116,49 @@ export const indexAllInputs = (): FormElement[] => {
  * @returns Boolean indicating success
  */
 export const fillInputByIdx = (idx: string, value: string): boolean => {
-  // Get the element from our map
-  const element = elementMap.get(idx);
-  
-  if (!element) {
-    console.error('Element with UUID not found:', idx);
-    return false;
-  }
-  
-  try {
-    if (element.tagName === 'SELECT') {
-      // Handle select elements
-      const selectElement = element as HTMLSelectElement;
-      const options = Array.from(selectElement.options);
-      
-      // Try to find a matching option
-      const matchingOption = options.find(option => {
-        const optionText = option.text.toLowerCase();
-        const valueText = value.toLowerCase();
-        return optionText.includes(valueText) || valueText.includes(optionText);
-      });
-      
-      if (matchingOption) {
-        selectElement.value = matchingOption.value;
-        selectElement.dispatchEvent(new Event('change', { bubbles: true }));
-      } else {
-        return false;
-      }
-    } else {
-      // Handle input and textarea elements
-      const inputElement = element as HTMLInputElement | HTMLTextAreaElement;
-      inputElement.value = value;
-      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-      inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    
-    // Apply highlighting style to indicate the field was filled
-    applyFilledStyle(element);
-    
-    return true;
-  } catch (error) {
-    console.error('Error filling element:', error);
-    return false;
-  }
+	// Get the element from our map
+	const element = elementMap.get(idx);
+
+	if (!element) {
+		console.error("Element with UUID not found:", idx);
+		return false;
+	}
+
+	try {
+		if (element.tagName === "SELECT") {
+			// Handle select elements
+			const selectElement = element as HTMLSelectElement;
+			const options = Array.from(selectElement.options);
+
+			// Try to find a matching option
+			const matchingOption = options.find((option) => {
+				const optionText = option.text.toLowerCase();
+				const valueText = value.toLowerCase();
+				return optionText.includes(valueText) || valueText.includes(optionText);
+			});
+
+			if (matchingOption) {
+				selectElement.value = matchingOption.value;
+				selectElement.dispatchEvent(new Event("change", { bubbles: true }));
+			} else {
+				return false;
+			}
+		} else {
+			// Handle input and textarea elements
+			const inputElement = element as HTMLInputElement | HTMLTextAreaElement;
+			inputElement.value = value;
+			inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+			inputElement.dispatchEvent(new Event("change", { bubbles: true }));
+		}
+
+		// Apply highlighting style to indicate the field was filled
+		applyFilledStyle(element);
+
+		return true;
+	} catch (error) {
+		console.error("Error filling element:", error);
+		return false;
+	}
 };
 
 /**
@@ -91,19 +166,19 @@ export const fillInputByIdx = (idx: string, value: string): boolean => {
  * @param element Element to style
  */
 const applyFilledStyle = (element: HTMLElement): void => {
-  // Save original styles to restore later
-  const originalStyle = element.getAttribute('style') || '';
-  element.setAttribute('data-quickfill-original-style', originalStyle);
-  
-  // Apply new style
-  element.setAttribute('style', `${originalStyle} ${FILLED_FIELD_STYLE}`);
-  
-  // Remove highlight after 3 seconds
-  setTimeout(() => {
-    const original = element.getAttribute('data-quickfill-original-style');
-    if (original !== null) {
-      element.setAttribute('style', original);
-      element.removeAttribute('data-quickfill-original-style');
-    }
-  }, 3000);
+	// Save original styles to restore later
+	const originalStyle = element.getAttribute("style") || "";
+	element.setAttribute("data-quickfill-original-style", originalStyle);
+
+	// Apply new style
+	element.setAttribute("style", `${originalStyle} ${FILLED_FIELD_STYLE}`);
+
+	// Remove highlight after 3 seconds
+	setTimeout(() => {
+		const original = element.getAttribute("data-quickfill-original-style");
+		if (original !== null) {
+			element.setAttribute("style", original);
+			element.removeAttribute("data-quickfill-original-style");
+		}
+	}, 3000);
 };

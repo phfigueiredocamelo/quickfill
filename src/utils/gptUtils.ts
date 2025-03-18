@@ -2,8 +2,8 @@
  * GPT API Utilities for QuickFill V2
  */
 
-import { GPTResponse, FormElement, Settings } from '../types';
-import { GPT_API_ENDPOINT } from './constants';
+import { GPTResponse, FormElement, Settings } from "../types";
+import { GPT_API_ENDPOINT } from "./constants";
 
 /**
  * Process form elements with GPT to get field values
@@ -13,41 +13,41 @@ import { GPT_API_ENDPOINT } from './constants';
  * @returns Response with field mappings
  */
 export const processFormWithGPT = async (
-  elements: FormElement[],
-  context: string,
-  settings: Settings
+	elements: FormElement[],
+	context: string,
+	settings: Settings,
 ): Promise<GPTResponse> => {
-  try {
-    const apiKey = settings.apiKey;
-    if (!apiKey) {
-      return {
-        success: false,
-        mappings: [],
-        error: 'API key is not set'
-      };
-    }
-
-    // Create the prompt for GPT
-    const prompt = createGPTPrompt(elements, context);
-
-    // Call the GPT API
-    const response = await callGPTAPI(prompt, apiKey, settings.selectedModel);
-    
-    // Parse the response to get field mappings
-    const mappings = parseGPTResponse(response, elements);
-    
-    return {
-      success: true,
-      mappings
-    };
-  } catch (error) {
-    console.error('Error processing form with GPT:', error);
-    return {
-      success: false,
-      mappings: [],
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
-  }
+	try {
+		const apiKey = settings.apiKey;
+		if (!apiKey) {
+			return {
+				success: false,
+				mappings: [],
+				error: "API key is not set",
+			};
+		}
+		console.log("elements", elements, "context", context, "settings", settings);
+		// Create the prompt for GPT
+		const prompt = createGPTPrompt(elements, context);
+		console.log("prompt", prompt);
+		// Call the GPT API
+		const response = await callGPTAPI(prompt, apiKey, settings.selectedModel);
+		console.log("response", response);
+		// Parse the response to get field mappings
+		const mappings = parseGPTResponse(response, elements);
+		console.log("mappings", mappings);
+		return {
+			success: true,
+			mappings,
+		};
+	} catch (error) {
+		console.error("Error processing form with GPT:", error);
+		return {
+			success: false,
+			mappings: [],
+			error: error instanceof Error ? error.message : "Unknown error",
+		};
+	}
 };
 
 /**
@@ -57,22 +57,25 @@ export const processFormWithGPT = async (
  * @returns Prompt string
  */
 const createGPTPrompt = (elements: FormElement[], context: string): string => {
-  // Create a simple representation of the input elements
-  const inputsRepresentation = elements.map(element => {
-    // Start with the element's basic info
-    let inputInfo = `Input (ID: ${element.idx})`;
-    
-    // Add any additional attributes
-    Object.entries(element).forEach(([key, value]) => {
-      if (key !== 'idx' && typeof value === 'string') {
-        inputInfo += `\n  ${key}: ${value}`;
-      }
-    });
-    
-    return inputInfo;
-  }).join('\n\n');
+	// Create a simple representation of the input elements
+	const inputsRepresentation = elements
+		.map((element) => {
+			// Start with the element's basic info
+			let inputInfo = `Input (ID: ${element.idx})`;
 
-  return `
+			// Add the concatenated attributes string
+			if (
+				element.otherAttributesMap &&
+				typeof element.otherAttributesMap === "string"
+			) {
+				inputInfo += `\n  Attributes: ${element.otherAttributesMap}`;
+			}
+
+			return inputInfo;
+		})
+		.join("\n\n");
+
+	return `
 You are an AI assistant that helps fill in form fields based on user information.
 
 I'll provide you with:
@@ -96,12 +99,13 @@ Respond with ONLY a JSON object containing field mappings in this exact format:
 }
 
 Important guidelines:
-- Only include fields you can confidently fill
+- Be creative associating user context with form fields when necessary
 - Use the exact field IDs provided
 - For select/dropdown fields, provide a value that would match one of the options
 - Do not make up information that's not in the user context
 - If you can't fill a field, omit it from the response
 - Do not include any explanations, only the JSON object
+- Try to transform value to match the expected mask if necessary
 `;
 };
 
@@ -113,40 +117,43 @@ Important guidelines:
  * @returns GPT API response text
  */
 const callGPTAPI = async (
-  prompt: string, 
-  apiKey: string,
-  model: string
+	prompt: string,
+	apiKey: string,
+	model: string,
 ): Promise<string> => {
-  const response = await fetch(GPT_API_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a helpful assistant that fills in form fields based on user context.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 2000
-    })
-  });
+	const response = await fetch(GPT_API_ENDPOINT, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${apiKey}`,
+		},
+		body: JSON.stringify({
+			model: model,
+			messages: [
+				{
+					role: "system",
+					content:
+						"You are a helpful assistant that fills in form fields based on user context.",
+				},
+				{
+					role: "user",
+					content: prompt,
+				},
+			],
+			temperature: 0.3,
+			max_tokens: 2000,
+		}),
+	});
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`GPT API error: ${errorData.error?.message || 'Unknown error'}`);
-  }
+	if (!response.ok) {
+		const errorData = await response.json();
+		throw new Error(
+			`GPT API error: ${errorData.error?.message || "Unknown error"}`,
+		);
+	}
 
-  const data = await response.json();
-  return data.choices[0].message.content;
+	const data = await response.json();
+	return data.choices[0].message.content;
 };
 
 /**
@@ -156,35 +163,35 @@ const callGPTAPI = async (
  * @returns Array of field mappings
  */
 const parseGPTResponse = (
-  responseText: string, 
-  elements: FormElement[]
-): { idx: string, value: string }[] => {
-  try {
-    // Extract JSON from response (handling potential markdown code blocks)
-    let jsonText = responseText.trim();
-    
-    // If the response is wrapped in a code block, extract it
-    const codeBlockMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (codeBlockMatch) {
-      jsonText = codeBlockMatch[1];
-    }
-    
-    // Parse the JSON
-    const data = JSON.parse(jsonText);
-    
-    // Validate the structure
-    if (!data.mappings || !Array.isArray(data.mappings)) {
-      throw new Error('Invalid response format');
-    }
-    
-    // Filter out any mappings with invalid IDs
-    const validIds = new Set(elements.map(e => e.idx));
-    return data.mappings.filter(mapping => 
-      validIds.has(mapping.idx) && 
-      typeof mapping.value === 'string'
-    );
-  } catch (error) {
-    console.error('Error parsing GPT response:', error);
-    return [];
-  }
+	responseText: string,
+	elements: FormElement[],
+): { idx: string; value: string }[] => {
+	try {
+		// Extract JSON from response (handling potential markdown code blocks)
+		let jsonText = responseText.trim();
+
+		// If the response is wrapped in a code block, extract it
+		const codeBlockMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+		if (codeBlockMatch) {
+			jsonText = codeBlockMatch[1];
+		}
+
+		// Parse the JSON
+		const data = JSON.parse(jsonText);
+
+		// Validate the structure
+		if (!data.mappings || !Array.isArray(data.mappings)) {
+			throw new Error("Invalid response format");
+		}
+
+		// Filter out any mappings with invalid IDs
+		const validIds = new Set(elements.map((e) => e.idx));
+		return data.mappings.filter(
+			(mapping) =>
+				validIds.has(mapping.idx) && typeof mapping.value === "string",
+		);
+	} catch (error) {
+		console.error("Error parsing GPT response:", error);
+		return [];
+	}
 };
