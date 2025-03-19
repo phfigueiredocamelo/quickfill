@@ -1,8 +1,3 @@
-/**
- * Background script for QuickFill V2
- * Handles extension logic and communication between popup and content script
- */
-
 import { FormElement, Settings, GPTResponse, LogEntry } from "../types";
 import { ACTIONS, DEFAULT_SETTINGS } from "../utils/constants";
 import {
@@ -12,6 +7,7 @@ import {
 	addLogEntry,
 	clearLogs,
 	getLogs,
+	getApiKey,
 } from "../utils/storageUtils";
 import { processFormWithGPT } from "../utils/gptUtils";
 
@@ -27,9 +23,12 @@ const initialize = (): void => {
 				handleUpdateSettings(message.settings, sendResponse);
 				break;
 
+			case ACTIONS.FILL_FORMS_WITH_PASSWORD:
+				handleFillForms(message, sendResponse);
+				break;
+
 			case ACTIONS.FILL_FORMS:
-				// ONLY handle fill forms when explicitly requested
-				handleFillForms(sendResponse);
+				handleFillForms(message, sendResponse);
 				break;
 
 			case ACTIONS.CLEAR_CONTEXT:
@@ -90,10 +89,11 @@ const handleUpdateSettings = async (
 
 /**
  * Handle form filling request - ONLY called when explicitly triggered
- * @param tabId ID of the tab to fill forms in
+ * @param message Message object containing request data (including password)
  * @param sendResponse Function to send response back
  */
 const handleFillForms = async (
+	message: { action: string; password?: string },
 	sendResponse: (response: any) => void,
 ): Promise<void> => {
 	let tabId: number;
@@ -120,6 +120,32 @@ const handleFillForms = async (
 			throw new Error("API key is not set. Add it in the settings.");
 		}
 
+		// Password is required for decryption
+		if (!message.password) {
+			throw new Error("Password is required to access encrypted data");
+		}
+		addLogEntry({
+			action: "debug",
+			success: true,
+			details: "Debugging form filling process",
+		});
+		// Get decrypted API key with the provided password
+		const apiKey = await getApiKey(message.password);
+		addLogEntry({
+			action: "debug",
+			success: true,
+			details: "Decrypted API key successfully",
+		});
+		if (!apiKey) {
+			throw new Error("Failed to decrypt API key. Check your password.");
+		}
+
+		// Create a temporary settings object with the decrypted API key
+		const settingsWithDecryptedKey = {
+			...settings,
+			apiKey: apiKey,
+		};
+
 		// Get form data from content script
 		const formData = await requestFormData(tabId);
 
@@ -142,8 +168,8 @@ const handleFillForms = async (
 			},
 		});
 
-		// Get user context data
-		const contextData = await getContextData();
+		// Get user context data with password provided by popup
+		const contextData = await getContextData(message.password);
 
 		if (!contextData?.data) {
 			await addLogEntry({
@@ -157,12 +183,12 @@ const handleFillForms = async (
 			});
 		}
 
-		// Process form with GPT
+		// Process form with GPT using decrypted API key
 		const response = await processFormWithGPT(
 			formData.elements,
 			contextData.format,
 			contextData.data,
-			settings,
+			settingsWithDecryptedKey,
 		);
 
 		// Log the GPT processing
@@ -179,34 +205,37 @@ const handleFillForms = async (
 		if (!response.success || response.mappings.length === 0) {
 			throw new Error("No fields could be filled");
 		}
-
 		// Send mappings to content script to fill the form
 		const fillResult = await fillFormFields(tabId, response.mappings);
 
+		if (!fillResult) {
+			console.error("Failed to fill forms");
+			throw new Error("Failed to fill forms");
+		}
 		// Log the action
 		await addLogEntry({
 			action: "fill_forms",
-			details: `Filled ${fillResult.results.successful} fields on ${formData.url}`,
+			details: `Filled ${fillResult.results?.successful} fields on ${formData.url}`,
 			success: true,
 			data: {
 				url: formData.url,
-				totalFields: fillResult.results.total,
-				filledFields: fillResult.results.successful,
-				failedFields: fillResult.results.failed,
+				totalFields: fillResult.results?.total ?? 0,
+				filledFields: fillResult.results?.successful ?? 0,
+				failedFields: fillResult.results?.failed ?? 0,
 			},
 		});
-
+		console.error("[background] Fill result:", fillResult);
 		sendResponse({
 			success: true,
 			result: fillResult.results,
 		});
 	} catch (error) {
-		console.error("Error filling forms:", error);
+		console.error("[background] Error filling forms:", error);
 
 		// Log the error
 		await addLogEntry({
 			action: "fill_forms",
-			details: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+			details: `Error: ${error instanceof Error ? `${error.message} ${JSON.stringify(error.stack)}` : error}`,
 			success: false,
 		});
 
@@ -299,6 +328,9 @@ const handleClearContext = async (
 		for (const format in settings.contextData) {
 			settings.contextData[format as keyof typeof settings.contextData] = "";
 		}
+
+		// Also clear password hash since we're clearing the context
+		settings.contextPasswordHash = "";
 
 		// Save updated settings
 		await saveSettings(settings);

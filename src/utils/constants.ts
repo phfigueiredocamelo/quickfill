@@ -6,12 +6,14 @@ import { GPTModel } from "../types";
 
 // Chrome message actions
 export const ACTIONS = {
+	FILL_FORMS_WITH_PASSWORD: "fillFormsWithPassword",
 	FILL_FORMS: "fillForms",
 	UPDATE_SETTINGS: "updateSettings",
 	GET_FORM_DATA: "getFormData",
 	CLEAR_CONTEXT: "clearContext",
 	CLEAR_LOGS: "clearLogs",
 	GET_LOGS: "getLogs",
+	UNLOCK_CONTEXT: "unlockContext",
 };
 
 // Storage keys
@@ -19,6 +21,7 @@ export const STORAGE_KEYS = {
 	SETTINGS: "scratchforms_settings",
 	LOGS: "scratchforms_logs",
 	CONTEXT_DATA: "scratchforms_context",
+	CONTEXT_PASSWORD_HASH: "scratchforms_context_password_hash",
 };
 
 // Input field selectors
@@ -40,6 +43,7 @@ export const DEFAULT_SETTINGS = {
 	},
 	selectedFormat: "json" as const,
 	selectedModel: "gpt-3.5-turbo" as GPTModel,
+	contextPasswordHash: "",
 };
 
 // Available GPT models

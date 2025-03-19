@@ -1,9 +1,5 @@
-/**
- * Content script for QuickFill V2
- * Runs in the context of web pages
- */
-
-import { FormElement, GPTResponse } from "../types";
+import { addLogEntry } from "@/utils/storageUtils";
+import type { FormElement, GPTResponse } from "../types";
 import { ACTIONS } from "../utils/constants";
 import { indexAllInputs, fillInputByIdx } from "../utils/domUtils";
 import { showNotification } from "../utils/notificationUtils";
@@ -80,14 +76,14 @@ const handleFillForms = (
 		};
 
 		// Fill each field
-		mappings.forEach((mapping) => {
+		for (const mapping of mappings) {
 			const success = fillInputByIdx(mapping.idx, mapping.value);
 			if (success) {
 				results.successful++;
 			} else {
 				results.failed++;
 			}
-		});
+		}
 		// Show notification with results
 		if (results.successful > 0) {
 			showNotification(

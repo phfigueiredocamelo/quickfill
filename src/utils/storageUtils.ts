@@ -4,7 +4,7 @@
 
 import { Settings, LogEntry, ContextFormat } from "../types";
 import { DEFAULT_SETTINGS, STORAGE_KEYS, MAX_LOG_ENTRIES } from "./constants";
-
+import * as cryptoUtils from "./cryptoUtils";
 /**
  * Saves settings to Chrome storage
  * @param settings Settings object to save
@@ -23,32 +23,97 @@ export const getSettings = async (): Promise<Settings> => {
 };
 
 /**
+ * Saves API key with encryption
+ * @param apiKey OpenAI API key to save
+ * @param password Password for encryption
+ */
+export const saveApiKey = async (
+	apiKey: string,
+	password: string,
+): Promise<void> => {
+	const settings = await getSettings();
+	const { encryptText, hashPassword } = cryptoUtils;
+	settings.apiKey = encryptText(apiKey, password);
+
+	// Store password hash if it doesn't exist
+	if (!settings.contextPasswordHash) {
+		settings.contextPasswordHash = hashPassword(password);
+	}
+
+	await saveSettings(settings);
+};
+
+/**
+ * Gets decrypted API key
+ * @param password Password for decryption
+ * @returns Decrypted API key or empty string if decryption fails
+ */
+export const getApiKey = async (password: string): Promise<string> => {
+	const settings = await getSettings();
+	const { decryptText } = cryptoUtils;
+	return decryptText(settings.apiKey, password);
+};
+
+/**
  * Saves context data for a specific format
  * @param format Format of the context data
  * @param data Context data string
+ * @param password Password for encryption
  */
 export const saveContextData = async (
 	format: ContextFormat,
 	data: string,
+	password: string,
 ): Promise<void> => {
 	const settings = await getSettings();
-	settings.contextData[format] = data;
+	const { encryptText, hashPassword } = cryptoUtils;
+	settings.contextData[format] = encryptText(data, password);
+
+	// Store password hash if it doesn't exist
+	if (!settings.contextPasswordHash) {
+		settings.contextPasswordHash = hashPassword(password);
+	}
+
 	await saveSettings(settings);
 };
 
 /**
  * Gets context data for the currently selected format
+ * @param password Password for decryption
  * @returns Context data string for selected format
  */
-export const getContextData = async (): Promise<{
+export const getContextData = async (
+	password: string,
+): Promise<{
 	data: string;
 	format: ContextFormat;
+	success: boolean;
 }> => {
 	const settings = await getSettings();
+	const { decryptText } = cryptoUtils;
+	const decryptedData = decryptText(
+		settings.contextData[settings.selectedFormat],
+		password,
+	);
+
 	return {
-		data: settings.contextData[settings.selectedFormat],
+		data: decryptedData,
 		format: settings.selectedFormat,
+		success: decryptedData !== "",
 	};
+};
+
+/**
+ * Verifies if the stored password hash matches the provided password
+ * @param password Password to verify
+ * @returns True if password is valid, false otherwise
+ */
+export const verifyPassword = async (password: string): Promise<boolean> => {
+	const settings = await getSettings();
+	if (!settings.contextPasswordHash) return false;
+
+	const { verifyPassword: verify } = cryptoUtils;
+	return verify(password, settings.contextPasswordHash);
 };
 
 /**
@@ -59,6 +124,7 @@ export const clearContextData = async (): Promise<void> => {
 	for (const format in settings.contextData) {
 		settings.contextData[format as ContextFormat] = "";
 	}
+	settings.contextPasswordHash = "";
 	await saveSettings(settings);
 };
 

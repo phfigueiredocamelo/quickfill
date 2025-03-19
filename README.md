@@ -49,3 +49,7 @@ Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dad
 - 19/03/2025 08:03: Limita host permissions no manifest.json para apenas o dominio do OpenIA.
 - 19/03/2025 08:44: Refina o prompt para melhorar o fit nos campos e só considerar campos textuais.
 - 19/03/2025 11:43: Remove scripting permissions do manifest.json, pois não são mais necessárias.
+- 19/03/2025 13:25: Implementa criptografia para o contexto do usuário usando crypto-js. Todo contexto agora é criptografado com AES e requer uma senha para acesso. Adiciona sistema de password prompt ao preencher formulários e ao acessar o painel de contexto, garantindo segurança dos dados pessoais. A senha é armazenada como hash SHA-256 para comparação segura.
+- 19/03/2025 16:20: Corrigido problema no painel de contexto onde o texto não aparecia após inserir a senha correta. Implementada decriptação e exibição do conteúdo ao desbloquear o contexto, e atualização automática do texto ao trocar o formato de dados. Também melhorada a interface removendo rótulo confuso "Context Data (Encrypted)" para simplesmente "Context Data".
+- 19/03/2025 13:20: Corrigido bug em que não fechava o prompt de senha pelo botão cancelar.
+- 19/03/2025 19:40: Resolvido problema "document is not defined" no background script ajustando a configuração do webpack para usar 'webworker' como target para o background script. Configurada a compilação para evitar divisão de chunks no service worker, garantindo que todas as dependências sejam empacotadas em um único arquivo, evitando erros de importScripts.

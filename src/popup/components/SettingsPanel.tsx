@@ -1,6 +1,7 @@
 import React from 'react';
 import { Settings, GPTModel } from '../../types';
 import { AVAILABLE_MODELS } from '../../utils/constants';
+import { verifyPassword as verifyPasswordUtil } from '../../utils/storageUtils';
 
 interface SettingsPanelProps {
   settings: Settings;

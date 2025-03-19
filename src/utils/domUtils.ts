@@ -2,7 +2,7 @@
  * DOM Utility functions for QuickFill V2
  */
 
-import { FormElement } from "../types";
+import type { FormElement } from "../types";
 import { INPUT_SELECTORS, FILLED_FIELD_STYLE } from "./constants";
 
 // Internal map to keep track of elements by UUID
@@ -16,7 +16,7 @@ const elementMap = new Map<string, HTMLElement>();
  */
 const findAllElements = (
 	selector: string,
-	root: Element | Document = document,
+	root: Element | Document,
 ): Element[] => {
 	// First, get elements matched by regular selector
 	const directMatches = Array.from(root.querySelectorAll(selector));
@@ -43,6 +43,14 @@ const findAllElements = (
  * @returns Array of elements with UUID indexes and attributes string
  */
 export const indexAllInputs = (): FormElement[] => {
+	// Check if document is defined (only works in content script, not background)
+	if (typeof document === "undefined") {
+		console.error(
+			"indexAllInputs called in context where document is not available",
+		);
+		return [];
+	}
+
 	// Clear previous element map
 	elementMap.clear();
 
@@ -50,11 +58,12 @@ export const indexAllInputs = (): FormElement[] => {
 	const selectorString = INPUT_SELECTORS.join(", ");
 
 	// Find all interactive elements, even those in aria-hidden containers or with pointer-events: none
-	const elements = findAllElements(selectorString);
+	const elements = findAllElements(selectorString, document);
 
 	// Special case for dialogs and modals - ensure we always check them
 	const modalElements = findAllElements(
 		'[role="dialog"], .modal, .dialog, [aria-modal="true"]',
+		document,
 	);
 	const modalInputs: Element[] = [];
 
@@ -67,7 +76,7 @@ export const indexAllInputs = (): FormElement[] => {
 	});
 
 	// Also get inputs within forms
-	const forms = findAllElements("form");
+	const forms = findAllElements("form", document);
 	const formInputsMap = new Map<Element, string>();
 
 	// Process form elements and track form IDs

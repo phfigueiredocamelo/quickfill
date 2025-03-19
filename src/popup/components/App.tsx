@@ -2,8 +2,12 @@ import React, { useState, useEffect } from "react";
 import SettingsPanel from "./SettingsPanel";
 import ContextPanel from "./ContextPanel";
 import LogPanel from "./LogPanel";
+import PasswordPrompt from "./PasswordPrompt";
+import PasswordModal from "./PasswordModal";
 import { Settings, LogEntry } from "../../types";
 import { ACTIONS, DEFAULT_SETTINGS } from "../../utils/constants";
+import { verifyPassword } from "../../utils/cryptoUtils";
+import { addLogEntry, saveApiKey } from "../../utils/storageUtils";
 
 // Main App component
 const App: React.FC = () => {
@@ -15,6 +19,10 @@ const App: React.FC = () => {
 	);
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
+	const [isPasswordPromptOpen, setIsPasswordPromptOpen] =
+		useState<boolean>(false);
+	const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
+	const [apiKeyInput, setApiKeyInput] = useState<string>("");
 
 	// Load settings when component mounts
 	useEffect(() => {
@@ -78,14 +86,30 @@ const App: React.FC = () => {
 		key: K,
 		value: Settings[K],
 	) => {
+		// Special handling for API key updates to prompt for encryption password
+		if (key === "apiKey") {
+			setApiKeyInput(value as string);
+			if (value && (value as string).trim() !== "") {
+				setIsApiKeyModalOpen(true);
+				return;
+			}
+		}
+
 		const newSettings = { ...settings, [key]: value };
 		saveSettings(newSettings);
 	};
 
 	// Start form filling process - ONLY when explicitly called
 	const fillForms = async () => {
-		setIsLoading(true);
 		setError(null);
+
+		// Sempre precisamos da senha para preencher formulários
+		setIsPasswordPromptOpen(true);
+	};
+
+	// Process the form filling with password
+	const processFillForms = async (password: string) => {
+		setIsLoading(true);
 
 		try {
 			const [tab] = await chrome.tabs.query({
@@ -99,8 +123,17 @@ const App: React.FC = () => {
 				);
 			}
 
+			// Se temos um hash de senha salvo, verificamos se a senha é correta
+			if (settings.contextPasswordHash) {
+				if (!verifyPassword(password, settings.contextPasswordHash)) {
+					throw new Error("Incorrect password. Please try again.");
+				}
+			}
+
+			// Processa com a senha fornecida
 			const response = await chrome.runtime.sendMessage({
-				action: ACTIONS.FILL_FORMS,
+				action: ACTIONS.FILL_FORMS_WITH_PASSWORD,
+				password: password,
 			});
 
 			if (!response.success) {
@@ -114,7 +147,33 @@ const App: React.FC = () => {
 			console.error("Error filling forms:", err);
 		} finally {
 			setIsLoading(false);
+			setIsPasswordPromptOpen(false);
 		}
+	};
+
+	// Handle API key encryption
+	const handleApiKeySave = async (password: string) => {
+		setIsLoading(true);
+
+		try {
+			// Store the API key with encryption
+			await saveApiKey(apiKeyInput, password);
+
+			// Reload settings to get the updated encrypted API key
+			await loadSettings();
+			setError(null);
+		} catch (err) {
+			setError("Failed to save API key");
+			console.error("Error saving API key:", err);
+		} finally {
+			setIsLoading(false);
+			setIsApiKeyModalOpen(false);
+		}
+	};
+
+	// Handle password submit from prompt
+	const handlePasswordSubmit = (password: string) => {
+		processFillForms(password);
 	};
 
 	// Clear context data
@@ -160,31 +219,54 @@ const App: React.FC = () => {
 		}
 	};
 
-	// Direct context update (circumventing async operation for smoother typing)
-	const handleContextUpdate = (data: string) => {
-		// Create updated context data
-		const newContextData = {
-			...settings.contextData,
-			[settings.selectedFormat]: data,
-		};
+	// Direct context update with encryption
+	const handleContextUpdate = (data: string, password: string) => {
+		// Set loading state while encrypting
+		setIsLoading(true);
 
-		// Update local state immediately for responsive UI
-		setSettings({
-			...settings,
-			contextData: newContextData,
-		});
+		// Encrypt and save the data
+		(async () => {
+			try {
+				const { encryptText, hashPassword } = await import(
+					"../../utils/cryptoUtils"
+				);
 
-		// Debounced saving to storage
-		const saveTimeout = setTimeout(() => {
-			chrome.storage.sync.set({
-				scratchforms_settings: {
+				// Encrypt the context data
+				const encryptedData = encryptText(data, password);
+
+				// Create updated context data
+				const newContextData = {
+					...settings.contextData,
+					[settings.selectedFormat]: encryptedData,
+				};
+
+				// Prepare new settings with password hash if needed
+				const newSettings = {
 					...settings,
 					contextData: newContextData,
-				},
-			});
-		}, 500);
+				};
 
-		return () => clearTimeout(saveTimeout);
+				// If no password hash exists, create one
+				if (!settings.contextPasswordHash) {
+					newSettings.contextPasswordHash = hashPassword(password);
+				}
+
+				// Update local state immediately for responsive UI
+				setSettings(newSettings);
+
+				// Save to storage
+				await chrome.storage.sync.set({
+					scratchforms_settings: newSettings,
+				});
+
+				setError(null);
+			} catch (err) {
+				console.error("Error encrypting context:", err);
+				setError("Failed to encrypt context data");
+			} finally {
+				setIsLoading(false);
+			}
+		})();
 	};
 
 	return (
@@ -237,6 +319,7 @@ const App: React.FC = () => {
 						onSelectFormat={(format) => updateSetting("selectedFormat", format)}
 						onClearContext={clearContext}
 						isLoading={isLoading}
+						contextPasswordHash={settings.contextPasswordHash || ""}
 					/>
 				)}
 
@@ -258,6 +341,26 @@ const App: React.FC = () => {
 				</div>
 				<p>ScratchForms © 2025</p>
 			</footer>
+
+			{/* Password prompt for form filling */}
+			<PasswordPrompt
+				isOpen={isPasswordPromptOpen}
+				onSubmit={handlePasswordSubmit}
+				onCancel={() => setIsPasswordPromptOpen(false)}
+			/>
+
+			{/* Password modal for API key encryption */}
+			<PasswordModal
+				isOpen={isApiKeyModalOpen}
+				onSubmit={handleApiKeySave}
+				onCancel={() => {
+					setIsApiKeyModalOpen(false);
+					// Reset API key input if canceled
+					setApiKeyInput("");
+				}}
+				title="Encrypt API Key"
+				message="Please enter a password to encrypt your API key. You'll need this password to use the API key for form filling."
+			/>
 		</div>
 	);
 };

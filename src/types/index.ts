@@ -13,6 +13,7 @@ export interface Settings {
   contextData: Record<ContextFormat, string>;
   selectedFormat: ContextFormat;
   selectedModel: GPTModel;
+  contextPasswordHash?: string;
 }
 
 // Data structure for tracking form elements
