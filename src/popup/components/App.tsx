@@ -162,6 +162,33 @@ const App: React.FC = () => {
 		}
 	};
 
+	// Direct context update (circumventing async operation for smoother typing)
+	const handleContextUpdate = (data: string) => {
+		// Create updated context data
+		const newContextData = {
+			...settings.contextData,
+			[settings.selectedFormat]: data,
+		};
+		
+		// Update local state immediately for responsive UI
+		setSettings({
+			...settings,
+			contextData: newContextData,
+		});
+
+		// Debounced saving to storage
+		const saveTimeout = setTimeout(() => {
+			chrome.storage.sync.set({
+				scratchforms_settings: {
+					...settings,
+					contextData: newContextData,
+				}
+			});
+		}, 500);
+
+		return () => clearTimeout(saveTimeout);
+	};
+
 	return (
 		<div className="app">
 			<header className="header">
@@ -208,12 +235,7 @@ const App: React.FC = () => {
 					<ContextPanel
 						contextData={settings.contextData}
 						selectedFormat={settings.selectedFormat}
-						onUpdateContext={(data) =>
-							updateSetting("contextData", {
-								...settings.contextData,
-								[settings.selectedFormat]: data,
-							})
-						}
+						onUpdateContext={handleContextUpdate}
 						onSelectFormat={(format) => updateSetting("selectedFormat", format)}
 						onClearContext={clearContext}
 						isLoading={isLoading}
