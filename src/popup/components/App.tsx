@@ -99,10 +99,8 @@ const App: React.FC = () => {
 				);
 			}
 
-			// This is the ONLY place where we should be sending FILL_FORMS action
 			const response = await chrome.runtime.sendMessage({
 				action: ACTIONS.FILL_FORMS,
-				tabId: tab.id, // Explicitly pass the tab ID to background script
 			});
 
 			if (!response.success) {
@@ -169,7 +167,7 @@ const App: React.FC = () => {
 			...settings.contextData,
 			[settings.selectedFormat]: data,
 		};
-		
+
 		// Update local state immediately for responsive UI
 		setSettings({
 			...settings,
@@ -182,7 +180,7 @@ const App: React.FC = () => {
 				scratchforms_settings: {
 					...settings,
 					contextData: newContextData,
-				}
+				},
 			});
 		}, 500);
 

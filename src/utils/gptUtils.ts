@@ -2,19 +2,21 @@
  * GPT API Utilities for QuickFill V2
  */
 
-import { GPTResponse, FormElement, Settings } from "../types";
+import { GPTResponse, FormElement, Settings, ContextFormat } from "../types";
 import { GPT_API_ENDPOINT } from "./constants";
 
 /**
  * Process form elements with GPT to get field values
  * @param elements Form elements to process
- * @param context User context to use for filling
+ * @param contextFormat Format of the user context
+ * @param contextContent User context to use for filling
  * @param settings Extension settings
  * @returns Response with field mappings
  */
 export const processFormWithGPT = async (
 	elements: FormElement[],
-	context: string,
+	contextFormat: ContextFormat,
+	contextContent: string,
 	settings: Settings,
 ): Promise<GPTResponse> => {
 	try {
@@ -27,7 +29,7 @@ export const processFormWithGPT = async (
 			};
 		}
 		// Create the prompt for GPT
-		const prompt = createGPTPrompt(elements, context);
+		const prompt = createGPTPrompt(elements, contextContent);
 		// Call the GPT API
 		const response = await callGPTAPI(prompt, apiKey, settings.selectedModel);
 		// Parse the response to get field mappings
@@ -50,22 +52,27 @@ export const processFormWithGPT = async (
 /**
  * Create a prompt for GPT to fill form fields
  * @param elements Form elements to process
+ * @param format Format of the user context
  * @param context User context to use
  * @returns Prompt string
  */
-const createGPTPrompt = (elements: FormElement[], context: string): string => {
+const createGPTPrompt = (
+	elements: FormElement[],
+	format: string,
+	context: string,
+): string => {
 	// Create a simple representation of the input elements
 	const inputsRepresentation = elements
 		.map((element) => {
 			// Start with the element's basic info
-			let inputInfo = `Input (ID: ${element.idx})`;
+			let inputInfo = `input_id: ${element.idx}`;
 
 			// Add the concatenated attributes string
 			if (
 				element.otherAttributesMap &&
 				typeof element.otherAttributesMap === "string"
 			) {
-				inputInfo += `\n  Attributes: ${element.otherAttributesMap}`;
+				inputInfo += `\n  summarized_attributes: ${element.otherAttributesMap}`;
 			}
 
 			return inputInfo;
@@ -84,25 +91,25 @@ Please analyze the form fields and determine the appropriate values based on the
 FORM INPUTS:
 ${inputsRepresentation}
 
-USER CONTEXT:
+USER CONTEXT (format: ${format}):
 ${context}
 
 Respond with ONLY a JSON object containing field mappings in this exact format:
 {
   "mappings": [
-    { "idx": "field-id-1", "value": "value for field 1" },
-    { "idx": "field-id-2", "value": "value for field 2" }
+    { "idx": "input_id", "value": "extracted value from context" },
+		...
   ]
 }
 
 Important guidelines:
+- Only fill fields that you undertand that is a input text or textarea
 - Be creative associating user context with form fields when necessary
 - Use the exact field IDs provided
-- For select/dropdown fields, provide a value that would match one of the options
 - Do not make up information that's not in the user context
 - If you can't fill a field, omit it from the response
 - Do not include any explanations, only the JSON object
-- Try to transform value to match the expected mask if necessary
+- Try to transform value to match the expected mask if it exists in the field attributes
 `;
 };
 

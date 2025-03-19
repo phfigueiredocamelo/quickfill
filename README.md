@@ -47,3 +47,4 @@ Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dad
 - 18/03/2025 17:20: Removido o suporte ao formato PDF para simplificar o sistema e reduzir complexidade. Contextos agora são suportados apenas nos formatos JSON, TXT, XML e CSV.
 - 18/03/2025 18:45: Corrigido problema com formulários em modais que não estavam sendo preenchidos devido a atributos aria-hidden e pointer-events. Implementada detecção especial de elementos em diálogos e solução para tratar elementos em contêineres com pointer-events: none.
 - 19/03/2025 08:03: Limita host permissions no manifest.json para apenas o dominio do OpenIA.
+- 19/03/2025 08:44: Refina o prompt para melhorar o fit nos campos e só considerar campos textuais.

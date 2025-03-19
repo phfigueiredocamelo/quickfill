@@ -110,7 +110,6 @@ const handleFillForms = async (
 			);
 		}
 
-		// Get current settings
 		const settings = await getSettings();
 
 		if (!settings.enabled) {
@@ -146,14 +145,23 @@ const handleFillForms = async (
 		// Get user context data
 		const contextData = await getContextData();
 
-		if (!contextData) {
-			throw new Error("No context data found. Add it in the settings.");
+		if (!contextData?.data) {
+			await addLogEntry({
+				action: "debug_input_data",
+				details: "No context data found",
+				success: false,
+				data: {
+					elements: formData.elements,
+					url: formData.url,
+				},
+			});
 		}
 
 		// Process form with GPT
 		const response = await processFormWithGPT(
 			formData.elements,
-			contextData,
+			contextData.format,
+			contextData.data,
 			settings,
 		);
 
