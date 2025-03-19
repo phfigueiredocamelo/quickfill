@@ -5,11 +5,9 @@ Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dad
 
 ## Observações
 - Projeto totalmente reescrito em TypeScript
-- Implementação do zero sem depender do código anterior
 - Salva o contexto do usuário em múltiplos formatos: JSON, TXT, XML e CSV
 - Usa índices UUID para identificar campos de formulário para preenchimento
 - Mantém logs detalhados de preenchimento no popup da extensão
-- Preenchimento ocorre apenas através do botão "Fill Forms", nunca automaticamente
 - Melhoria na detecção de campos dentro de formulários
 - Captura todos os atributos relevantes de campos incluindo labels e formId
 - Suporte a formulários em modais e diálogos com técnicas anti-automação
@@ -48,7 +46,4 @@ Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dad
 - 18/03/2025 15:35: Melhorada a exibição de logs JSON no LogPanel, convertendo estruturas JSON em texto legível com chaves e valores formatados para facilitar a leitura e análise dos dados. Adicionada função formatJsonData que transforma objetos JSON em texto humanamente legível, melhorando significativamente a visualização de contextos, elementos e respostas do GPT.
 - 18/03/2025 17:20: Removido o suporte ao formato PDF para simplificar o sistema e reduzir complexidade. Contextos agora são suportados apenas nos formatos JSON, TXT, XML e CSV.
 - 18/03/2025 18:45: Corrigido problema com formulários em modais que não estavam sendo preenchidos devido a atributos aria-hidden e pointer-events. Implementada detecção especial de elementos em diálogos e solução para tratar elementos em contêineres com pointer-events: none.
-
-## Comandos Úteis
-- Desenvolvimento: `npm run dev`
-- Build de produção: `npm run build`
+- 19/03/2025 08:03: Limita host permissions no manifest.json para apenas o dominio do OpenIA.
