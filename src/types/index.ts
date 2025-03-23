@@ -1,10 +1,10 @@
 // Basic types for QuickFill V2
 
 // Format options for saving context
-export type ContextFormat = 'json' | 'txt' | 'csv' | 'xml';
+export type ContextFormat = "json" | "txt" | "csv" | "xml";
 
 // GPT model options
-export type GPTModel = 'gpt-3.5-turbo' | 'gpt-4-turbo' | 'gpt-4o';
+export type GPTModel = "gpt-3.5-turbo" | "gpt-4-turbo" | "gpt-4o";
 
 // Extension settings
 export interface Settings {
@@ -18,8 +18,9 @@ export interface Settings {
 
 // Data structure for tracking form elements
 export interface FormElement {
-  idx: string;           // Unique UUID for referencing
-  [key: string]: any;    // Allow any additional attributes
+  idx: string; // Unique UUID for referencing
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+  [key: string]: any; // Allow any additional attributes
 }
 
 // Form processing result
@@ -35,6 +36,7 @@ export interface LogEntry {
   action: string;
   details: string;
   success: boolean;
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
   data?: Record<string, any>;
 }
 

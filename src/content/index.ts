@@ -1,4 +1,3 @@
-import { addLogEntry } from "@/utils/storageUtils";
 import type { FormElement, GPTResponse } from "../types";
 import { ACTIONS } from "../utils/constants";
 import { indexAllInputs, fillInputByIdx } from "../utils/domUtils";

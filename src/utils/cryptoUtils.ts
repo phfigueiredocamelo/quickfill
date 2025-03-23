@@ -12,7 +12,7 @@ import CryptoJS from "crypto-js";
  * @returns The encrypted string
  */
 export const encryptText = (text: string, password: string): string => {
-	return CryptoJS.AES.encrypt(text, password).toString();
+  return CryptoJS.AES.encrypt(text, password).toString();
 };
 
 /**
@@ -23,16 +23,16 @@ export const encryptText = (text: string, password: string): string => {
  * @returns The decrypted string or empty string if decryption fails
  */
 export const decryptText = (
-	encryptedText: string,
-	password: string,
+  encryptedText: string,
+  password: string,
 ): string => {
-	try {
-		const bytes = CryptoJS.AES.decrypt(encryptedText, password);
-		return bytes.toString(CryptoJS.enc.Utf8);
-	} catch (error) {
-		console.error("Decryption failed:", error);
-		return "";
-	}
+  try {
+    const bytes = CryptoJS.AES.decrypt(encryptedText, password);
+    return bytes.toString(CryptoJS.enc.Utf8);
+  } catch (error) {
+    console.error("Decryption failed:", error);
+    return "";
+  }
 };
 
 /**
@@ -42,7 +42,7 @@ export const decryptText = (
  * @returns The hashed password
  */
 export const hashPassword = (password: string): string => {
-	return CryptoJS.SHA256(password).toString();
+  return CryptoJS.SHA256(password).toString();
 };
 
 /**
@@ -53,9 +53,9 @@ export const hashPassword = (password: string): string => {
  * @returns True if the password matches, false otherwise
  */
 export const verifyPassword = (
-	password: string,
-	storedHash: string,
+  password: string,
+  storedHash: string,
 ): boolean => {
-	const hashedPassword = hashPassword(password);
-	return hashedPassword === storedHash;
+  const hashedPassword = hashPassword(password);
+  return hashedPassword === storedHash;
 };

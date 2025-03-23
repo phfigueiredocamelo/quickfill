@@ -1,12 +1,9 @@
-import { FormElement, Settings, GPTResponse, LogEntry } from "../types";
+import type { FormElement, Settings, GPTResponse } from "../types";
 import { ACTIONS, DEFAULT_SETTINGS } from "../utils/constants";
 import {
 	getSettings,
 	saveSettings,
 	getContextData,
-	addLogEntry,
-	clearLogs,
-	getLogs,
 	getApiKey,
 } from "../utils/storageUtils";
 import { processFormWithGPT } from "../utils/gptUtils";
@@ -33,14 +30,6 @@ const initialize = (): void => {
 
 			case ACTIONS.CLEAR_CONTEXT:
 				handleClearContext(sendResponse);
-				break;
-
-			case ACTIONS.CLEAR_LOGS:
-				handleClearLogs(sendResponse);
-				break;
-
-			case ACTIONS.GET_LOGS:
-				handleGetLogs(sendResponse);
 				break;
 
 			default:
@@ -72,12 +61,7 @@ const handleUpdateSettings = async (
 		await saveSettings(settings);
 		sendResponse({ success: true });
 
-		// Log the action
-		await addLogEntry({
-			action: "update_settings",
-			details: "Settings updated",
-			success: true,
-		});
+		// Settings successfully updated
 	} catch (error) {
 		console.error("Error updating settings:", error);
 		sendResponse({
@@ -124,18 +108,14 @@ const handleFillForms = async (
 		if (!message.password) {
 			throw new Error("Password is required to access encrypted data");
 		}
-		addLogEntry({
-			action: "debug",
-			success: true,
-			details: "Debugging form filling process",
-		});
+
+		// Starting form fill process
+
 		// Get decrypted API key with the provided password
 		const apiKey = await getApiKey(message.password);
-		addLogEntry({
-			action: "debug",
-			success: true,
-			details: "Decrypted API key successfully",
-		});
+
+		// API key decrypted successfully
+
 		if (!apiKey) {
 			throw new Error("Failed to decrypt API key. Check your password.");
 		}
@@ -157,30 +137,14 @@ const handleFillForms = async (
 			throw new Error("No form elements found on the page");
 		}
 
-		// Log the extracted form elements
-		await addLogEntry({
-			action: "debug_input_data",
-			details: `Found ${formData.elements.length} form elements on ${formData.url}`,
-			success: true,
-			data: {
-				elements: formData.elements,
-				url: formData.url,
-			},
-		});
+		// Found form elements on page
 
 		// Get user context data with password provided by popup
 		const contextData = await getContextData(message.password);
 
+		// Check if context data exists
 		if (!contextData?.data) {
-			await addLogEntry({
-				action: "debug_input_data",
-				details: "No context data found",
-				success: false,
-				data: {
-					elements: formData.elements,
-					url: formData.url,
-				},
-			});
+			console.warn("No context data found");
 		}
 
 		// Process form with GPT using decrypted API key
@@ -191,16 +155,7 @@ const handleFillForms = async (
 			settingsWithDecryptedKey,
 		);
 
-		// Log the GPT processing
-		await addLogEntry({
-			action: "debug_gpt_process",
-			details: `GPT model ${settings.selectedModel} processed form data`,
-			success: response.success,
-			data: {
-				contextBuilt: contextData,
-				gptResponse: response,
-			},
-		});
+		// GPT processing completed
 
 		if (!response.success || response.mappings.length === 0) {
 			throw new Error("No fields could be filled");
@@ -212,18 +167,9 @@ const handleFillForms = async (
 			console.error("Failed to fill forms");
 			throw new Error("Failed to fill forms");
 		}
-		// Log the action
-		await addLogEntry({
-			action: "fill_forms",
-			details: `Filled ${fillResult.results?.successful} fields on ${formData.url}`,
-			success: true,
-			data: {
-				url: formData.url,
-				totalFields: fillResult.results?.total ?? 0,
-				filledFields: fillResult.results?.successful ?? 0,
-				failedFields: fillResult.results?.failed ?? 0,
-			},
-		});
+
+		// Fields were successfully filled
+
 		console.error("[background] Fill result:", fillResult);
 		sendResponse({
 			success: true,
@@ -232,12 +178,7 @@ const handleFillForms = async (
 	} catch (error) {
 		console.error("[background] Error filling forms:", error);
 
-		// Log the error
-		await addLogEntry({
-			action: "fill_forms",
-			details: `Error: ${error instanceof Error ? `${error.message} ${JSON.stringify(error.stack)}` : error}`,
-			success: false,
-		});
+		// Error occurred while filling forms
 
 		sendResponse({
 			success: false,
@@ -335,58 +276,11 @@ const handleClearContext = async (
 		// Save updated settings
 		await saveSettings(settings);
 
-		// Log the action
-		await addLogEntry({
-			action: "clear_context",
-			details: "Context data cleared",
-			success: true,
-		});
+		// Context data was cleared
 
 		sendResponse({ success: true });
 	} catch (error) {
 		console.error("Error clearing context:", error);
-		sendResponse({
-			success: false,
-			error: error instanceof Error ? error.message : "Unknown error",
-		});
-	}
-};
-
-/**
- * Handle clearing log entries
- * @param sendResponse Function to send response back
- */
-const handleClearLogs = async (
-	sendResponse: (response: any) => void,
-): Promise<void> => {
-	try {
-		// Clear logs from storage using the utility function
-		await clearLogs();
-
-		sendResponse({ success: true });
-	} catch (error) {
-		console.error("Error clearing logs:", error);
-		sendResponse({
-			success: false,
-			error: error instanceof Error ? error.message : "Unknown error",
-		});
-	}
-};
-
-/**
- * Handle getting log entries
- * @param sendResponse Function to send response back
- */
-const handleGetLogs = async (
-	sendResponse: (response: any) => void,
-): Promise<void> => {
-	try {
-		// Get logs from storage using the utility function
-		const logs = await getLogs();
-
-		sendResponse({ success: true, logs });
-	} catch (error) {
-		console.error("Error getting logs:", error);
 		sendResponse({
 			success: false,
 			error: error instanceof Error ? error.message : "Unknown error",

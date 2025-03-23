@@ -2,15 +2,15 @@
  * Chrome Storage utility functions
  */
 
-import { Settings, LogEntry, ContextFormat } from "../types";
-import { DEFAULT_SETTINGS, STORAGE_KEYS, MAX_LOG_ENTRIES } from "./constants";
+import type { Settings, ContextFormat } from "../types";
+import { DEFAULT_SETTINGS, STORAGE_KEYS } from "./constants";
 import * as cryptoUtils from "./cryptoUtils";
 /**
  * Saves settings to Chrome storage
  * @param settings Settings object to save
  */
 export const saveSettings = async (settings: Settings): Promise<void> => {
-	await chrome.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: settings });
+  await chrome.storage.sync.set({ [STORAGE_KEYS.SETTINGS]: settings });
 };
 
 /**
@@ -18,8 +18,8 @@ export const saveSettings = async (settings: Settings): Promise<void> => {
  * @returns Settings object or default settings if none found
  */
 export const getSettings = async (): Promise<Settings> => {
-	const result = await chrome.storage.sync.get(STORAGE_KEYS.SETTINGS);
-	return result[STORAGE_KEYS.SETTINGS] || DEFAULT_SETTINGS;
+  const result = await chrome.storage.sync.get(STORAGE_KEYS.SETTINGS);
+  return result[STORAGE_KEYS.SETTINGS] || DEFAULT_SETTINGS;
 };
 
 /**
@@ -28,19 +28,19 @@ export const getSettings = async (): Promise<Settings> => {
  * @param password Password for encryption
  */
 export const saveApiKey = async (
-	apiKey: string,
-	password: string,
+  apiKey: string,
+  password: string,
 ): Promise<void> => {
-	const settings = await getSettings();
-	const { encryptText, hashPassword } = cryptoUtils;
-	settings.apiKey = encryptText(apiKey, password);
+  const settings = await getSettings();
+  const { encryptText, hashPassword } = cryptoUtils;
+  settings.apiKey = encryptText(apiKey, password);
 
-	// Store password hash if it doesn't exist
-	if (!settings.contextPasswordHash) {
-		settings.contextPasswordHash = hashPassword(password);
-	}
+  // Store password hash if it doesn't exist
+  if (!settings.contextPasswordHash) {
+    settings.contextPasswordHash = hashPassword(password);
+  }
 
-	await saveSettings(settings);
+  await saveSettings(settings);
 };
 
 /**
@@ -49,9 +49,9 @@ export const saveApiKey = async (
  * @returns Decrypted API key or empty string if decryption fails
  */
 export const getApiKey = async (password: string): Promise<string> => {
-	const settings = await getSettings();
-	const { decryptText } = cryptoUtils;
-	return decryptText(settings.apiKey, password);
+  const settings = await getSettings();
+  const { decryptText } = cryptoUtils;
+  return decryptText(settings.apiKey, password);
 };
 
 /**
@@ -61,20 +61,20 @@ export const getApiKey = async (password: string): Promise<string> => {
  * @param password Password for encryption
  */
 export const saveContextData = async (
-	format: ContextFormat,
-	data: string,
-	password: string,
+  format: ContextFormat,
+  data: string,
+  password: string,
 ): Promise<void> => {
-	const settings = await getSettings();
-	const { encryptText, hashPassword } = cryptoUtils;
-	settings.contextData[format] = encryptText(data, password);
+  const settings = await getSettings();
+  const { encryptText, hashPassword } = cryptoUtils;
+  settings.contextData[format] = encryptText(data, password);
 
-	// Store password hash if it doesn't exist
-	if (!settings.contextPasswordHash) {
-		settings.contextPasswordHash = hashPassword(password);
-	}
+  // Store password hash if it doesn't exist
+  if (!settings.contextPasswordHash) {
+    settings.contextPasswordHash = hashPassword(password);
+  }
 
-	await saveSettings(settings);
+  await saveSettings(settings);
 };
 
 /**
@@ -83,24 +83,24 @@ export const saveContextData = async (
  * @returns Context data string for selected format
  */
 export const getContextData = async (
-	password: string,
+  password: string,
 ): Promise<{
-	data: string;
-	format: ContextFormat;
-	success: boolean;
+  data: string;
+  format: ContextFormat;
+  success: boolean;
 }> => {
-	const settings = await getSettings();
-	const { decryptText } = cryptoUtils;
-	const decryptedData = decryptText(
-		settings.contextData[settings.selectedFormat],
-		password,
-	);
+  const settings = await getSettings();
+  const { decryptText } = cryptoUtils;
+  const decryptedData = decryptText(
+    settings.contextData[settings.selectedFormat],
+    password,
+  );
 
-	return {
-		data: decryptedData,
-		format: settings.selectedFormat,
-		success: decryptedData !== "",
-	};
+  return {
+    data: decryptedData,
+    format: settings.selectedFormat,
+    success: decryptedData !== "",
+  };
 };
 
 /**
@@ -109,61 +109,21 @@ export const getContextData = async (
  * @returns True if password is valid, false otherwise
  */
 export const verifyPassword = async (password: string): Promise<boolean> => {
-	const settings = await getSettings();
-	if (!settings.contextPasswordHash) return false;
+  const settings = await getSettings();
+  if (!settings.contextPasswordHash) return false;
 
-	const { verifyPassword: verify } = cryptoUtils;
-	return verify(password, settings.contextPasswordHash);
+  const { verifyPassword: verify } = cryptoUtils;
+  return verify(password, settings.contextPasswordHash);
 };
 
 /**
  * Clears all context data for all formats
  */
 export const clearContextData = async (): Promise<void> => {
-	const settings = await getSettings();
-	for (const format in settings.contextData) {
-		settings.contextData[format as ContextFormat] = "";
-	}
-	settings.contextPasswordHash = "";
-	await saveSettings(settings);
-};
-
-/**
- * Adds a log entry to storage
- * @param entry Log entry to add
- */
-export const addLogEntry = async (
-	entry: Omit<LogEntry, "timestamp">,
-): Promise<void> => {
-	const result = await chrome.storage.local.get(STORAGE_KEYS.LOGS);
-	const logs: LogEntry[] = result[STORAGE_KEYS.LOGS] || [];
-
-	// Add new entry with timestamp
-	logs.unshift({
-		...entry,
-		timestamp: Date.now(),
-	});
-
-	// Limit the number of entries
-	if (logs.length > MAX_LOG_ENTRIES) {
-		logs.length = MAX_LOG_ENTRIES;
-	}
-
-	await chrome.storage.local.set({ [STORAGE_KEYS.LOGS]: logs });
-};
-
-/**
- * Gets all log entries
- * @returns Array of log entries
- */
-export const getLogs = async (): Promise<LogEntry[]> => {
-	const result = await chrome.storage.local.get(STORAGE_KEYS.LOGS);
-	return result[STORAGE_KEYS.LOGS] || [];
-};
-
-/**
- * Clears all log entries
- */
-export const clearLogs = async (): Promise<void> => {
-	await chrome.storage.local.set({ [STORAGE_KEYS.LOGS]: [] });
+  const settings = await getSettings();
+  for (const format in settings.contextData) {
+    settings.contextData[format as ContextFormat] = "";
+  }
+  settings.contextPasswordHash = "";
+  await saveSettings(settings);
 };
