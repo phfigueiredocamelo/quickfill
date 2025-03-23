@@ -53,3 +53,4 @@ Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dad
 - 19/03/2025 16:20: Corrigido problema no painel de contexto onde o texto não aparecia após inserir a senha correta. Implementada decriptação e exibição do conteúdo ao desbloquear o contexto, e atualização automática do texto ao trocar o formato de dados. Também melhorada a interface removendo rótulo confuso "Context Data (Encrypted)" para simplesmente "Context Data".
 - 19/03/2025 13:20: Corrigido bug em que não fechava o prompt de senha pelo botão cancelar.
 - 19/03/2025 19:40: Resolvido problema "document is not defined" no background script ajustando a configuração do webpack para usar 'webworker' como target para o background script. Configurada a compilação para evitar divisão de chunks no service worker, garantindo que todas as dependências sejam empacotadas em um único arquivo, evitando erros de importScripts.
+- 23/03/2025 13:01: Adicionado biome
