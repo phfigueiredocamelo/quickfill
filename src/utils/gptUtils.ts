@@ -110,9 +110,10 @@ Respond with ONLY a JSON object containing field mappings in this exact format:
 Important guidelines:
 - Only fill fields that you undertand that is a input text or textarea
 - Be creative associating user context with form fields when necessary
+- Some fields can repeat, so you can use the same value for multiple fields
 - Use the exact field IDs provided
 - Do not make up information that's not in the user context
-- If you can't fill a field, omit it from the response
+- If you can't fill a field, add *** as the value
 - Do not include any explanations, only the JSON object
 - Try to transform value to match the expected mask if it exists in the field attributes
 `;
