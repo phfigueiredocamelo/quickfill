@@ -55,3 +55,4 @@ Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dad
 - 19/03/2025 19:40: Resolvido problema "document is not defined" no background script ajustando a configuração do webpack para usar 'webworker' como target para o background script. Configurada a compilação para evitar divisão de chunks no service worker, garantindo que todas as dependências sejam empacotadas em um único arquivo, evitando erros de importScripts.
 - 23/03/2025 13:01: Adicionado biome
 - 23/03/2025 21:18: Corrige modal de novo password para aparecer campo confirmar senha.
+- 23/03/2025 21:27: Corrige bug que não dava para digitar no campo de contexto.

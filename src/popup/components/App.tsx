@@ -176,9 +176,6 @@ const App: React.FC = () => {
 
   // Direct context update with encryption
   const handleContextUpdate = (data: string, password: string) => {
-    // Set loading state while encrypting
-    setIsLoading(true);
-
     // Encrypt and save the data
     (async () => {
       try {
