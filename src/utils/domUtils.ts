@@ -9,7 +9,7 @@ import { INPUT_SELECTORS, FILLED_FIELD_STYLE } from "./constants";
 const elementMap = new Map<string, HTMLElement>();
 
 /**
- * Finds all elements that match a selector, ignoring aria-hidden status
+ * Finds all elements that match a selector
  * @param selector CSS selector to match
  * @param root Root element to start search from
  * @returns Array of matching elements
@@ -18,24 +18,9 @@ const findAllElements = (
   selector: string,
   root: Element | Document,
 ): Element[] => {
-  // First, get elements matched by regular selector
   const directMatches = Array.from(root.querySelectorAll(selector));
-
-  // Get all elements in the document (including hidden ones)
-  const allElements = Array.from(root.querySelectorAll("*"));
-
-  // Filter to just the ones that match our selector via matches()
-  // This will include elements hidden by aria-hidden
-  const allMatches = allElements.filter((el) => {
-    try {
-      return el.matches(selector);
-    } catch (e) {
-      return false;
-    }
-  });
-
   // Remove duplicates by creating a Set
-  return [...new Set([...directMatches, ...allMatches])];
+  return [...directMatches];
 };
 
 /**
@@ -133,14 +118,6 @@ export const indexAllInputs = (): FormElement[] => {
       attributesString += `formId="${formId}" `;
     }
 
-    // Add info about modal/dialog container if present
-    const dialogParent = el.closest(
-      '[role="dialog"], .modal, .dialog, [aria-modal="true"]',
-    );
-    if (dialogParent) {
-      attributesString += `inDialog="true" `;
-    }
-
     // Create a FormElement with UUID and attributes string
     return {
       idx: uuid,
@@ -209,31 +186,11 @@ export const fillInputByIdx = (idx: string, value: string): boolean => {
       }
     }
 
-    if (element.tagName === "SELECT") {
-      // Handle select elements
-      const selectElement = element as HTMLSelectElement;
-      const options = Array.from(selectElement.options);
-
-      // Try to find a matching option
-      const matchingOption = options.find((option) => {
-        const optionText = option.text.toLowerCase();
-        const valueText = value.toLowerCase();
-        return optionText.includes(valueText) || valueText.includes(optionText);
-      });
-
-      if (matchingOption) {
-        selectElement.value = matchingOption.value;
-        selectElement.dispatchEvent(new Event("change", { bubbles: true }));
-      } else {
-        return false;
-      }
-    } else {
-      // Handle input and textarea elements
-      const inputElement = element as HTMLInputElement | HTMLTextAreaElement;
-      inputElement.value = value;
-      inputElement.dispatchEvent(new Event("input", { bubbles: true }));
-      inputElement.dispatchEvent(new Event("change", { bubbles: true }));
-    }
+    // Handle input and textarea elements
+    const inputElement = element as HTMLInputElement | HTMLTextAreaElement;
+    inputElement.value = value;
+    inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+    inputElement.dispatchEvent(new Event("change", { bubbles: true }));
 
     // Apply highlighting style to indicate the field was filled
     applyFilledStyle(element);
