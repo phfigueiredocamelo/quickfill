@@ -56,3 +56,4 @@ Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dad
 - 23/03/2025 13:01: Adicionado biome
 - 23/03/2025 21:18: Corrige modal de novo password para aparecer campo confirmar senha.
 - 23/03/2025 21:27: Corrige bug que não dava para digitar no campo de contexto.
+- 23/03/2025 22:06: Remove contextUtils que não estava sendo usado.
