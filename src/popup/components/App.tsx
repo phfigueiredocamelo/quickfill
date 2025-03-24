@@ -308,6 +308,11 @@ const App: React.FC = () => {
           // Reset API key input if canceled
           setApiKeyInput("");
         }}
+        isNewPassword={
+          settings.contextPasswordHash === undefined ||
+          settings.contextPasswordHash === "" ||
+          settings.contextPasswordHash === null
+        }
         title="Encrypt API Key"
         message="Please enter a password to encrypt your API key. You'll need this password to use the API key for form filling."
       />
