@@ -25,7 +25,6 @@ export const STORAGE_KEYS = {
 export const INPUT_SELECTORS = [
   'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"])',
   "textarea",
-  '[role="dialog"], .modal, .dialog, [aria-modal="true"]',
 ];
 
 // Default settings
