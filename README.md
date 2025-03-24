@@ -58,3 +58,4 @@ Extensão Chrome que preenche formulários HTML automaticamente usando GPT e dad
 - 23/03/2025 21:27: Corrige bug que não dava para digitar no campo de contexto.
 - 23/03/2025 22:06: Remove contextUtils que não estava sendo usado.
 - 23/03/2025 22:13: Melhora o prompt para o GPT adicionando novos gidelines para deixar a experiência mais dinâminca.
+- 23/03/2025 22:30: Aprimorado o botão "Clear All Context Data" para também limpar a API key quando acionado.

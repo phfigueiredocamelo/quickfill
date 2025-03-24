@@ -171,9 +171,9 @@ const ContextPanel: React.FC<ContextPanelProps> = ({
             type="button"
             className="danger-button"
             onClick={handleClearContext}
-            disabled={isLoading || !decryptedContent}
+            disabled={isLoading}
           >
-            Clear All Context Data
+            Clear All Data
           </button>
         </>
       ) : (
