@@ -264,9 +264,7 @@ const App: React.FC = () => {
         {activeTab === "context" && (
           <ContextPanel
             contextData={settings.contextData}
-            selectedFormat={settings.selectedFormat}
             onUpdateContext={handleContextUpdate}
-            onSelectFormat={(format) => updateSetting("selectedFormat", format)}
             onClearContext={clearContext}
             isLoading={isLoading}
             contextPasswordHash={settings.contextPasswordHash || ""}

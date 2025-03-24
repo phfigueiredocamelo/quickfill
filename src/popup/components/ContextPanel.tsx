@@ -1,14 +1,11 @@
 // biome-ignore lint/style/useImportType: React import type is not allowed
 import React, { useState, useEffect } from "react";
-import type { ContextFormat } from "../../types";
 import PasswordModal from "./PasswordModal";
 import { verifyPassword } from "../../utils/cryptoUtils";
 
 interface ContextPanelProps {
-  contextData: Record<ContextFormat, string>;
-  selectedFormat: ContextFormat;
+  contextData: string;
   onUpdateContext: (data: string, password: string) => void;
-  onSelectFormat: (format: ContextFormat) => void;
   onClearContext: () => void;
   isLoading: boolean;
   contextPasswordHash: string;
@@ -16,15 +13,11 @@ interface ContextPanelProps {
 
 const ContextPanel: React.FC<ContextPanelProps> = ({
   contextData,
-  selectedFormat,
   onUpdateContext,
-  onSelectFormat,
   onClearContext,
   isLoading,
   contextPasswordHash,
 }) => {
-  const formatOptions: ContextFormat[] = ["json", "txt", "csv", "xml"];
-
   const [decryptedContent, setDecryptedContent] = useState<string>("");
   const [isPasswordModalOpen, setIsPasswordModalOpen] =
     useState<boolean>(false);
@@ -73,7 +66,7 @@ const ContextPanel: React.FC<ContextPanelProps> = ({
         // Decrypt and show the context data for the current format
         try {
           const { decryptText } = await import("../../utils/cryptoUtils");
-          const decrypted = decryptText(contextData[selectedFormat], password);
+          const decrypted = decryptText(contextData, password);
           setDecryptedContent(decrypted);
         } catch (error) {
           console.error("Failed to decrypt context:", error);
@@ -114,50 +107,14 @@ const ContextPanel: React.FC<ContextPanelProps> = ({
       {isUnlocked ? (
         <>
           <div className="form-group">
-            <label htmlFor="format-select">Format</label>
-            <select
-              id="format-select"
-              value={selectedFormat}
-              onChange={async (e) => {
-                const newFormat = e.target.value as ContextFormat;
-                onSelectFormat(newFormat);
-
-                // When format changes, we need to decrypt the content for the new format
-                if (currentPassword) {
-                  try {
-                    const { decryptText } = await import(
-                      "../../utils/cryptoUtils"
-                    );
-                    const decrypted = decryptText(
-                      contextData[newFormat],
-                      currentPassword,
-                    );
-                    setDecryptedContent(decrypted);
-                  } catch (error) {
-                    console.error(
-                      "Failed to decrypt context for new format:",
-                      error,
-                    );
-                  }
-                }
-              }}
-              disabled={isLoading}
-            >
-              {formatOptions.map((format) => (
-                <option key={format} value={format}>
-                  {format.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
             <label htmlFor="context-data">Context Data</label>
             <textarea
               id="context-data"
               value={decryptedContent}
               onChange={handleContentChange}
-              placeholder={`Enter your user context data in ${selectedFormat.toUpperCase()} format`}
+              placeholder={
+                "Enter your user context data in any format you like. This will be used to fill forms automatically."
+              }
               rows={10}
               disabled={isLoading}
             />

@@ -2,12 +2,7 @@
  * GPT API Utilities for QuickFill V2
  */
 
-import type {
-  GPTResponse,
-  FormElement,
-  Settings,
-  ContextFormat,
-} from "../types";
+import type { GPTResponse, FormElement, Settings } from "../types";
 import { GPT_API_ENDPOINT } from "./constants";
 
 /**
@@ -20,7 +15,6 @@ import { GPT_API_ENDPOINT } from "./constants";
  */
 export const processFormWithGPT = async (
   elements: FormElement[],
-  contextFormat: ContextFormat,
   contextContent: string,
   settings: Settings,
 ): Promise<GPTResponse> => {
@@ -34,7 +28,7 @@ export const processFormWithGPT = async (
       };
     }
     // Create the prompt for GPT
-    const prompt = createGPTPrompt(elements, contextFormat, contextContent);
+    const prompt = createGPTPrompt(elements, contextContent);
     // Call the GPT API
     const response = await callGPTAPI(prompt, apiKey, settings.selectedModel);
     // Parse the response to get field mappings
@@ -61,11 +55,7 @@ export const processFormWithGPT = async (
  * @param context User context to use
  * @returns Prompt string
  */
-const createGPTPrompt = (
-  elements: FormElement[],
-  format: string,
-  context: string,
-): string => {
+const createGPTPrompt = (elements: FormElement[], context: string): string => {
   // Create a simple representation of the input elements
   const inputsRepresentation = elements
     .map((element) => {
@@ -96,7 +86,7 @@ Please analyze the form fields and determine the appropriate values based on the
 FORM INPUTS:
 ${inputsRepresentation}
 
-USER CONTEXT (format: ${format}):
+USER CONTEXT:
 ${context}
 
 Respond with ONLY a JSON object containing field mappings in this exact format:

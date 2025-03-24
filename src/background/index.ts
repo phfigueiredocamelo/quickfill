@@ -150,7 +150,6 @@ const handleFillForms = async (
     // Process form with GPT using decrypted API key
     const response = await processFormWithGPT(
       formData.elements,
-      contextData.format,
       contextData.data,
       settingsWithDecryptedKey,
     );

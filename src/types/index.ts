@@ -1,7 +1,4 @@
-// Basic types for QuickFill V2
-
-// Format options for saving context
-export type ContextFormat = "json" | "txt" | "csv" | "xml";
+// Basic types
 
 // GPT model options
 export type GPTModel = "gpt-3.5-turbo" | "gpt-4-turbo" | "gpt-4o";
@@ -10,8 +7,7 @@ export type GPTModel = "gpt-3.5-turbo" | "gpt-4-turbo" | "gpt-4o";
 export interface Settings {
   enabled: boolean;
   apiKey: string;
-  contextData: Record<ContextFormat, string>;
-  selectedFormat: ContextFormat;
+  contextData: string;
   selectedModel: GPTModel;
   contextPasswordHash?: string;
 }
@@ -28,16 +24,6 @@ export interface ProcessingResult {
   success: boolean;
   fields: FormElement[];
   errors?: string[];
-}
-
-// Log entry structure
-export interface LogEntry {
-  timestamp: number;
-  action: string;
-  details: string;
-  success: boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-  data?: Record<string, any>;
 }
 
 // GPT API response structure

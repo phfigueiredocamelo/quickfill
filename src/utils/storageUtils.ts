@@ -2,7 +2,7 @@
  * Chrome Storage utility functions
  */
 
-import type { Settings, ContextFormat } from "../types";
+import type { Settings } from "../types";
 import { DEFAULT_SETTINGS, STORAGE_KEYS } from "./constants";
 import * as cryptoUtils from "./cryptoUtils";
 /**
@@ -61,13 +61,12 @@ export const getApiKey = async (password: string): Promise<string> => {
  * @param password Password for encryption
  */
 export const saveContextData = async (
-  format: ContextFormat,
   data: string,
   password: string,
 ): Promise<void> => {
   const settings = await getSettings();
   const { encryptText, hashPassword } = cryptoUtils;
-  settings.contextData[format] = encryptText(data, password);
+  settings.contextData = encryptText(data, password);
 
   // Store password hash if it doesn't exist
   if (!settings.contextPasswordHash) {
@@ -86,19 +85,14 @@ export const getContextData = async (
   password: string,
 ): Promise<{
   data: string;
-  format: ContextFormat;
   success: boolean;
 }> => {
   const settings = await getSettings();
   const { decryptText } = cryptoUtils;
-  const decryptedData = decryptText(
-    settings.contextData[settings.selectedFormat],
-    password,
-  );
+  const decryptedData = decryptText(settings.contextData, password);
 
   return {
     data: decryptedData,
-    format: settings.selectedFormat,
     success: decryptedData !== "",
   };
 };
@@ -121,9 +115,7 @@ export const verifyPassword = async (password: string): Promise<boolean> => {
  */
 export const clearContextData = async (): Promise<void> => {
   const settings = await getSettings();
-  for (const format in settings.contextData) {
-    settings.contextData[format as ContextFormat] = "";
-  }
+  settings.contextData = "";
   settings.contextPasswordHash = "";
   await saveSettings(settings);
 };
